@@ -324,6 +324,12 @@ class FirstKVerifier(Verifier):
          attention_scores = attention_scores.multiply(attn.scale)
 
          add_constraint = hasattr(self.args, 'add_softmax_sum_constraint') and self.args.add_softmax_sum_constraint
+         print("\n--- Debug: attention_scores before softmax ---")
+         l_as, u_as = attention_scores.concretize()
+         if l_as is not None:
+            print(f"attention_scores Lower - Min: {l_as.min().item():.4e}, Max: {l_as.max().item():.4e}, Mean: {l_as.mean().item():.4e}, NaN_count: {torch.isnan(l_as).sum().item()}")
+         if u_as is not None:
+            print(f"attention_scores Upper - Min: {u_as.min().item():.4e}, Max: {u_as.max().item():.4e}, Mean: {u_as.mean().item():.4e}, NaN_count: {torch.isnan(u_as).sum().item()}")
          attention_probs = attention_scores.softmax(verbose=self.verbose, no_constraints=not add_constraint)
 
          value = value.expand_error_terms_to_match_zonotope(attention_probs)
