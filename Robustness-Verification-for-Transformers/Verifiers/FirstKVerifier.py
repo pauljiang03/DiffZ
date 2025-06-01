@@ -323,6 +323,19 @@ class FirstKVerifier(Verifier):
          attention_scores = self.do_dot_product(query, key, layer_num)
          attention_scores = attention_scores.multiply(attn.scale)
 
+
+
+
+
+        with torch.no_grad():
+            l_scores, u_scores = attention_scores.concretize()
+            if u_scores is not None:
+                max_u_for_softmax = u_scores.max(dim=-1, keepdim=True)[0]
+        
+                attention_scores.zonotope_w[0] = attention_scores.zonotope_w[0] - max_u_for_softmax
+            else:
+                print("WARNING: Could not apply softmax stability trick because upper bounds were None.")
+
          add_constraint = hasattr(self.args, 'add_softmax_sum_constraint') and self.args.add_softmax_sum_constraint
          print("\n--- Debug: attention_scores before softmax ---")
          l_as, u_as = attention_scores.concretize()
