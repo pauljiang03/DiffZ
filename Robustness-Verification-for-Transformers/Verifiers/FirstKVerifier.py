@@ -327,13 +327,21 @@ class FirstKVerifier(Verifier):
 
 
 
-         with torch.no_grad():
-             l_scores, u_scores = attention_scores.concretize()
-             if u_scores is not None:
-                 max_u_for_softmax = u_scores.max(dim=-1, keepdim=True)[0]
-                 attention_scores.zonotope_w[0] = attention_scores.zonotope_w[0] - max_u_for_softmax
-             else:
-                 print("WARNING: Could not apply softmax stability trick because upper bounds were None.")
+        with torch.no_grad():
+            l_scores, u_scores = attention_scores.concretize()
+            if u_scores is not None:
+                max_u_for_softmax = u_scores.max(dim=-1, keepdim=True)[0] # Shape: (A, N_q, 1)
+                if attention_scores.zonotope_w.ndim == 4: # Check it's 4D as expected
+                    current_centers = attention_scores.zonotope_w[:, 0, :, :] # Shape: (A, N_q, N_k_dim)
+                    attention_scores.zonotope_w[:, 0, :, :] = current_centers - max_u_for_softmax
+                elif attention_scores.zonotope_w.ndim == 3: # Fallback if it's still 3D for some reason
+                    print(f"WARNING: attention_scores.zonotope_w is 3D. Shape: {attention_scores.zonotope_w.shape}")
+                    print(f"Shape of max_u_for_softmax: {max_u_for_softmax.shape}")
+                    attention_scores.zonotope_w[0, :, :] = attention_scores.zonotope_w[0, :, :] - max_u_for_softmax.squeeze(0) # Attempt to make it work if A=1
+                else:
+                    print(f"ERROR: Unexpected zonotope_w ndim: {attention_scores.zonotope_w.ndim}")
+            else:
+                print("WARNING: Could not apply softmax stability trick because upper bounds were None.")
 
          add_constraint = hasattr(self.args, 'add_softmax_sum_constraint') and self.args.add_softmax_sum_constraint
          print("\n--- Debug: attention_scores before softmax ---")
