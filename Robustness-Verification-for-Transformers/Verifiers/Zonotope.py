@@ -1356,7 +1356,7 @@ class Zonotope:
             return self.remove_attention_heads_dim(clone=False).exp_minimal_area(return_raw_tensors_separately, allow_modifying_input_zonotope).add_attention_heads_dim(A, clone=False)
 
         l, u = self.concretize()
-        MAX_EXP_ARG = 30.0 # Adjust this value based on float precision (e.g., 70 for float32 might be safer than 700)
+        MAX_EXP_ARG = 10.0 # Adjust this value based on float precision (e.g., 70 for float32 might be safer than 700)
         print(f"DEBUG exp_minimal_area: Original l min/max: {l.min().item():.2e}/{l.max().item():.2e}, u min/max: {u.min().item():.2e}/{u.max().item():.2e}")
 
         l = torch.clamp(l, min=-MAX_EXP_ARG, max=MAX_EXP_ARG)
