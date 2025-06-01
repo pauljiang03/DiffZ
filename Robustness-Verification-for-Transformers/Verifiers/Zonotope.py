@@ -1356,6 +1356,14 @@ class Zonotope:
             return self.remove_attention_heads_dim(clone=False).exp_minimal_area(return_raw_tensors_separately, allow_modifying_input_zonotope).add_attention_heads_dim(A, clone=False)
 
         l, u = self.concretize()
+        MAX_EXP_ARG = 70.0 # Adjust this value based on float precision (e.g., 70 for float32 might be safer than 700)
+        print(f"DEBUG exp_minimal_area: Original l min/max: {l.min().item():.2e}/{l.max().item():.2e}, u min/max: {u.min().item():.2e}/{u.max().item():.2e}")
+
+        l = torch.clamp(l, min=-MAX_EXP_ARG, max=MAX_EXP_ARG)
+        u = torch.clamp(u, min=-MAX_EXP_ARG, max=MAX_EXP_ARG)
+        u = torch.max(u, l) 
+
+        print(f"DEBUG exp_minimal_area: Clamped l min/max: {l.min().item():.2e}/{l.max().item():.2e}, u min/max: {u.min().item():.2e}/{u.max().item():.2e}")
 
         # terms that have new error weights
         different_bool = has_new_error_term = (l != u)
@@ -1365,8 +1373,20 @@ class Zonotope:
         shape = list(self.zonotope_w.shape)
         if not return_raw_tensors_separately:
             shape[0] += n_new_error_terms
+        
+        exp_l = l.exp()
+        exp_u = u.exp()
 
-        t_crit = ((u.exp() - l.exp()) / (u - l)).log()
+        t_crit_arg = (exp_u - exp_l) / (u - l + 1e-20)
+
+        inf_slope_mask = torch.isinf(exp_u) & ~torch.isinf(exp_l)
+        t_crit_arg[inf_slope_mask] = float('inf')
+
+        t_crit = torch.log(t_crit_arg + 1e-20) # Epsilon for log of near zero
+        t_crit[torch.isnan(t_crit) | torch.isneginf(t_crit)] = (0.5 * l + 0.5 * u)[torch.isnan(t_crit) | torch.isneginf(t_crit)]
+        t_crit[torch.isposinf(t_crit)] = u[torch.isposinf(t_crit)] # If t_crit is inf, use u for t_opt choice later.
+
+        #t_crit = ((u.exp() - l.exp()) / (u - l)).log()
         t_crit[u == l] = float('inf')  # Replace NaNs by infinity
         t_crit[t_crit == float('-inf')] = (0.5 * l + 0.5 * u)[t_crit == float('-inf')]  # Replace -Inf that arise from the log to avg(l, u)
         # t_crit[t_crit == float('-inf')] = float('+inf')  # Replace -Inf that arise from the log to avg(l, u)
@@ -1375,6 +1395,7 @@ class Zonotope:
 
         if (t_opt == float('-inf')).any():
             t_opt = torch.min(torch.min(t_crit, t_crit2), u)  # Idea: has to be below L + 1 (and <= U)
+
 
         # λ = f'(t) = e^t
         lambdas = t_opt.exp()
@@ -2639,6 +2660,24 @@ def process_values(input_zonotope_w: torch.Tensor, source_zonotope: "Zonotope", 
 
     ### Step 2: compute all the exp(xj - xi)
     # End shape: (1 + num_error_terms, A * num_rows, num_values * num_values)?
+
+
+
+
+     print("\n--- DEBUG process_values: Input to exp_minimal_area ('zonotope_diffs') ---")
+     l_zd, u_zd = zonotope_diffs.concretize()
+     if l_zd is not None:
+         print(f"zonotope_diffs Lower - Min: {l_zd.min().item():.4e}, Max: {l_zd.max().item():.4e}, Mean: {l_zd.mean().item():.4e}, NaNs: {torch.isnan(l_zd).sum().item()}, Infs: {torch.isinf(l_zd).sum().item()}")
+     if u_zd is not None: # Similar for u_zd
+         print(f"zonotope_diffs Upper - Min: {u_zd.min().item():.4e}, Max: {u_zd.max().item():.4e}, Mean: {u_zd.mean().item():.4e}, NaNs: {torch.isnan(u_zd).sum().item()}, Infs: {torch.isinf(u_zd).sum().item()}")
+
+
+
+
+
+
+    
+    
     incomplete_diffs_exp_w, exp_new_error_term = zonotope_diffs.exp_minimal_area(return_raw_tensors_separately=True,
                                                                                  allow_modifying_input_zonotope=True)
     # full_exp_zonotope = zonotope_diffs.exp_mark(return_raw_tensors_separately=False)
