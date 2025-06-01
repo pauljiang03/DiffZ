@@ -1645,6 +1645,15 @@ class Zonotope:
             # return zonotope_sum_exp_diffs
 
             ### Step 4: Compute the inverse for all of these sums, thus obtaining all the softmax values
+            print("\n--- Debug: zonotope_sum_exp_diffs (input to reciprocal in softmax) ---")
+            l_sed, u_sed = zonotope_sum_exp_diffs.concretize()
+            if l_sed is not None:
+                print(f"sum_exp_diffs Lower - Min: {l_sed.min().item():.4e}, Max: {l_sed.max().item():.4e}, Mean: {l_sed.mean().item():.4e}, NaN: {torch.isnan(l_sed).sum().item()}, Inf: {torch.isinf(l_sed).sum().item()}")
+                problematic_l_indices = torch.where(l_sed <= 1e-9) # Check for very small or non-positive
+                if problematic_l_indices[0].numel() > 0:
+                    print(f"Found {problematic_l_indices[0].numel()} l_sed values <= 1e-9.")
+            if u_sed is not None:
+                print(f"sum_exp_diffs Upper - Min: {u_sed.min().item():.4e}, Max: {u_sed.max().item():.4e}, Mean: {u_sed.mean().item():.4e}, NaN: {torch.isnan(u_sed).sum().item()}, Inf: {torch.isinf(u_sed).sum().item()}")
             zonotope_softmax = zonotope_sum_exp_diffs.reciprocal(original_implementation=not use_new_reciprocal, y_positive_constraint=add_value_positivity_constraint)
         else:
             # zonotope_with_adjusted_center = self.subtract_max_from_bias()
@@ -1917,6 +1926,95 @@ class Zonotope:
         # terms that have new error weights
         different_bool = has_new_error_term = (l != u)
         equal_bool = (l == u)
+
+
+
+        if different_bool.any() and (self.args.debug or self.args.verbose):
+            with torch.no_grad():
+                def print_stats(tensor, name, indent="    "):
+                    if tensor is None:
+                        print(f"{indent}{name}: None")
+                        return
+                    tensor = tensor.detach()
+                    if tensor.numel() == 1:
+                        # For single values, just print the value.
+                        print(f"{indent}{name}: {tensor.item():.6e}")
+                    else:
+                        # For tensors, print stats.
+                        print(f"{indent}{name} - Shape: {tensor.shape}, Min: {tensor.min().item():.4e}, Max: {tensor.max().item():.4e}, Mean: {tensor.mean().item():.4e}, NaNs: {torch.isnan(tensor).sum().item()}, Infs: {torch.isinf(tensor).sum().item()}")
+
+                print("\n--- DEBUG: Reciprocal Internals ---")
+                
+                # Find the first problematic index for detailed analysis.
+                # We will analyze the element with the minimum 'l' value among those
+                # where l != u, as near-zero 'l' values are often the cause of instability.
+                problem_indices_flat = torch.where(different_bool.flatten())[0]
+                if problem_indices_flat.numel() > 0:
+                    l_different_flat = l.flatten()[problem_indices_flat]
+                    min_l_val, min_l_local_idx = torch.min(l_different_flat, 0)
+                    # Get the global flat index of the most problematic element
+                    problem_flat_idx = problem_indices_flat[min_l_local_idx]
+                    
+                    # Convert flat index back to multi-dimensional index for printing
+                    problem_multi_idx = np.unravel_index(problem_flat_idx.cpu().numpy(), l.shape)
+                    print(f"  Analyzing element with min 'l' at index: {problem_multi_idx} (flat index: {problem_flat_idx})")
+
+                    # 1. Print input l and u for this specific element
+                    l_sample = l.flatten()[problem_flat_idx]
+                    u_sample = u.flatten()[problem_flat_idx]
+                    print_stats(l_sample, "l (at sample index)")
+                    print_stats(u_sample, "u (at sample index)")
+
+                    # Re-calculate intermediate values for this single element
+                    # Add a small epsilon for stability in divisions to prevent debug prints from crashing
+                    epsilon_div = 1e-20
+
+                    # 2. mean_slope
+                    mean_slope_sample = (u_sample.reciprocal() - l_sample.reciprocal()) / (u_sample - l_sample + epsilon_div)
+                    print_stats(mean_slope_sample, "mean_slope")
+
+                    # 3. Argument to sqrt for t_crit
+                    arg_sqrt_sample = -mean_slope_sample.reciprocal()
+                    print_stats(arg_sqrt_sample, "Argument to sqrt for t_crit")
+
+                    # 4. t_crit
+                    # Clamp the argument to be non-negative before sqrt to prevent NaNs
+                    t_crit_sample = (arg_sqrt_sample.clamp(min=0.0) + epsilon_div).sqrt()
+                    print_stats(t_crit_sample, "t_crit")
+
+                    # 5. t_crit2
+                    t_crit2_sample = u_sample / 2.0
+                    print_stats(t_crit2_sample, "t_crit2")
+                    
+                    # 6. t_opt (advisor's suggestion: "dump t_opt")
+                    t_opt_sample = t_crit_sample
+                    if y_positive_constraint:
+                        t_opt_sample = torch.max(t_crit_sample, t_crit2_sample + 0.01)
+                    print_stats(t_opt_sample, "t_opt")
+
+                    # 7. lambdas
+                    lambdas_sample = -(t_opt_sample + epsilon_div).reciprocal().square()
+                    print_stats(lambdas_sample, "lambdas")
+
+                    # 8. X
+                    X_sample = (l_sample + epsilon_div).reciprocal() - lambdas_sample * l_sample
+                    print_stats(X_sample, "X")
+
+                    # 9. Components of NEW_COEFFS
+                    print("    Components of NEW_COEFFS (before * 0.5):")
+                    term1 = lambdas_sample * t_opt_sample
+                    term2 = -(t_opt_sample + epsilon_div).reciprocal()
+                    term3 = X_sample
+                    new_coeffs_sum_sample = term1 + term2 + term3
+                    print_stats(term1, "  (lambdas * t_opt)")
+                    print_stats(term2, "  (-t_opt.reciprocal())")
+                    print_stats(term3, "  (X)")
+                    print_stats(new_coeffs_sum_sample, "Sum of components")
+                
+                print("--- END DEBUG: Reciprocal Internals ---\n")
+
+
+        
 
         n_new_error_terms = int(has_new_error_term.sum().item())
 
