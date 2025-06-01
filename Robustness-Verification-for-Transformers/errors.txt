@@ -381,3 +381,133 @@ Traceback (most recent call last):
 AssertionError: Reciprocal: there are NaNs in the new COEFFS, pre-condition not met
 Verification failed: Propagation returned None.
   Result: ERROR
+
+
+
+----------------  
+
+
+Starting verification...
+Verifying 10 examples
+--- Verifying Sample 1/10 ---
+
+--- Debug: attention_scores before softmax ---
+attention_scores Lower - Min: -6.9466e-01, Max: 5.6991e-01, Mean: -2.0006e-03, NaN_count: 0
+attention_scores Upper - Min: -6.7719e-01, Max: 5.8563e-01, Mean: 8.2096e-03, NaN_count: 0
+
+--- Debug: zonotope_sum_exp_diffs (input to reciprocal in softmax) ---
+sum_exp_diffs Lower - Min: 9.8647e+00, Max: 3.4528e+01, Mean: 1.7114e+01, NaN: 0, Inf: 0
+sum_exp_diffs Upper - Min: 1.0023e+01, Max: 3.5186e+01, Mean: 1.7310e+01, NaN: 0, Inf: 0
+
+--- Debug: attention_scores before softmax ---
+attention_scores Lower - Min: -5.5446e-01, Max: 7.6341e-01, Mean: 3.3944e-03, NaN_count: 0
+attention_scores Upper - Min: -5.3364e-01, Max: 7.8153e-01, Mean: 1.4738e-02, NaN_count: 0
+
+--- Debug: zonotope_sum_exp_diffs (input to reciprocal in softmax) ---
+sum_exp_diffs Lower - Min: 8.2800e+00, Max: 2.9997e+01, Mean: 1.7113e+01, NaN: 0, Inf: 0
+sum_exp_diffs Upper - Min: 8.4358e+00, Max: 3.0594e+01, Mean: 1.7335e+01, NaN: 0, Inf: 0
+
+--- Debug: attention_scores before softmax ---
+attention_scores Lower - Min: -8.0285e-01, Max: 7.1776e-01, Mean: -1.9750e-03, NaN_count: 0
+attention_scores Upper - Min: -7.7693e-01, Max: 7.4181e-01, Mean: 1.1865e-02, NaN_count: 0
+
+--- Debug: zonotope_sum_exp_diffs (input to reciprocal in softmax) ---
+sum_exp_diffs Lower - Min: 9.3029e+00, Max: 4.2405e+01, Mean: 1.7071e+01, NaN: 0, Inf: 0
+sum_exp_diffs Upper - Min: 9.5372e+00, Max: 4.3709e+01, Mean: 1.7346e+01, NaN: 0, Inf: 0
+
+--- Debug: attention_scores before softmax ---
+attention_scores Lower - Min: -7.2231e-01, Max: 6.5358e-01, Mean: -2.9980e-03, NaN_count: 0
+attention_scores Upper - Min: -6.9035e-01, Max: 6.7948e-01, Mean: 1.4036e-02, NaN_count: 0
+
+--- Debug: zonotope_sum_exp_diffs (input to reciprocal in softmax) ---
+sum_exp_diffs Lower - Min: 8.9271e+00, Max: 3.5089e+01, Mean: 1.7086e+01, NaN: 0, Inf: 0
+sum_exp_diffs Upper - Min: 9.1743e+00, Max: 3.6353e+01, Mean: 1.7429e+01, NaN: 0, Inf: 0
+
+--- Debug: attention_scores before softmax ---
+attention_scores Lower - Min: -7.1026e-01, Max: 6.7555e-01, Mean: -2.1002e-02, NaN_count: 0
+attention_scores Upper - Min: -6.7098e-01, Max: 7.1421e-01, Mean: -7.6798e-04, NaN_count: 0
+
+--- Debug: zonotope_sum_exp_diffs (input to reciprocal in softmax) ---
+sum_exp_diffs Lower - Min: 9.4953e+00, Max: 3.3964e+01, Mean: 1.7066e+01, NaN: 0, Inf: 0
+sum_exp_diffs Upper - Min: 9.8798e+00, Max: 3.5597e+01, Mean: 1.7489e+01, NaN: 0, Inf: 0
+
+--- Debug: attention_scores before softmax ---
+attention_scores Lower - Min: -7.6148e-01, Max: 7.0905e-01, Mean: 1.4012e-03, NaN_count: 0
+attention_scores Upper - Min: -7.2006e-01, Max: 7.4228e-01, Mean: 2.8605e-02, NaN_count: 0
+
+--- Debug: zonotope_sum_exp_diffs (input to reciprocal in softmax) ---
+sum_exp_diffs Lower - Min: 9.4613e+00, Max: 3.4896e+01, Mean: 1.7006e+01, NaN: 0, Inf: 0
+sum_exp_diffs Upper - Min: 9.9013e+00, Max: 3.6801e+01, Mean: 1.7575e+01, NaN: 0, Inf: 0
+
+--- Debug: attention_scores before softmax ---
+attention_scores Lower - Min: -1.0031e+00, Max: 5.9112e-01, Mean: -2.2663e-02, NaN_count: 0
+attention_scores Upper - Min: -9.4124e-01, Max: 6.3999e-01, Mean: 1.4828e-02, NaN_count: 0
+
+--- Debug: zonotope_sum_exp_diffs (input to reciprocal in softmax) ---
+sum_exp_diffs Lower - Min: 9.8784e+00, Max: 3.6962e+01, Mean: 1.6888e+01, NaN: 0, Inf: 0
+sum_exp_diffs Upper - Min: 1.0452e+01, Max: 3.9873e+01, Mean: 1.7683e+01, NaN: 0, Inf: 0
+
+--- Debug: attention_scores before softmax ---
+attention_scores Lower - Min: -1.0022e+00, Max: 1.0451e+00, Mean: -4.5842e-02, NaN_count: 0
+attention_scores Upper - Min: -9.2057e-01, Max: 1.1176e+00, Mean: 8.1370e-03, NaN_count: 0
+
+--- Debug: zonotope_sum_exp_diffs (input to reciprocal in softmax) ---
+sum_exp_diffs Lower - Min: 6.4334e+00, Max: 3.7096e+01, Mean: 1.6853e+01, NaN: 0, Inf: 0
+sum_exp_diffs Upper - Min: 7.0012e+00, Max: 4.0528e+01, Mean: 1.8065e+01, NaN: 0, Inf: 0
+
+--- Debug: attention_scores before softmax ---
+attention_scores Lower - Min: -1.1445e+00, Max: 8.3230e-01, Mean: -9.0762e-02, NaN_count: 0
+attention_scores Upper - Min: -1.0229e+00, Max: 9.5031e-01, Mean: -2.5325e-04, NaN_count: 0
+
+--- Debug: zonotope_sum_exp_diffs (input to reciprocal in softmax) ---
+sum_exp_diffs Lower - Min: 6.7954e+00, Max: 4.2557e+01, Mean: 1.6471e+01, NaN: 0, Inf: 0
+sum_exp_diffs Upper - Min: 7.8615e+00, Max: 5.0006e+01, Mean: 1.8593e+01, NaN: 0, Inf: 0
+
+--- Debug: attention_scores before softmax ---
+attention_scores Lower - Min: -1.1845e+00, Max: 1.1872e+00, Mean: -8.6867e-02, NaN_count: 0
+attention_scores Upper - Min: -9.7174e-01, Max: 1.3740e+00, Mean: 8.9568e-02, NaN_count: 0
+
+--- Debug: zonotope_sum_exp_diffs (input to reciprocal in softmax) ---
+sum_exp_diffs Lower - Min: 4.3022e+00, Max: 4.3465e+01, Mean: 1.5406e+01, NaN: 0, Inf: 0
+sum_exp_diffs Upper - Min: 5.4944e+00, Max: 6.0400e+01, Mean: 2.0054e+01, NaN: 0, Inf: 0
+
+--- Debug: attention_scores before softmax ---
+attention_scores Lower - Min: -1.6888e+00, Max: 3.8490e-01, Mean: -3.4952e-01, NaN_count: 0
+attention_scores Upper - Min: -9.4433e-01, Max: 1.0539e+00, Mean: 3.2970e-01, NaN_count: 0
+
+--- Debug: zonotope_sum_exp_diffs (input to reciprocal in softmax) ---
+sum_exp_diffs Lower - Min: 3.5707e+00, Max: 1.4814e+01, Mean: 7.3367e+00, NaN: 0, Inf: 0
+sum_exp_diffs Upper - Min: 1.3188e+01, Max: 8.2201e+01, Mean: 3.0913e+01, NaN: 0, Inf: 0
+
+--- Debug: attention_scores before softmax ---
+attention_scores Lower - Min: -1.4783e+02, Max: -4.0064e+00, Mean: -6.1459e+01, NaN_count: 0
+attention_scores Upper - Min: 4.0708e+00, Max: 1.4765e+02, Mean: 6.1622e+01, NaN_count: 0
+
+--- Debug: zonotope_sum_exp_diffs (input to reciprocal in softmax) ---
+sum_exp_diffs Lower - Min: nan, Max: nan, Mean: nan, NaN: 1077, Inf: 0
+Found 79 l_sed values <= 1e-9.
+sum_exp_diffs Upper - Min: 3.0627e+12, Max: inf, Mean: inf, NaN: 0, Inf: 1077
+ERROR during abstract interpretation: Reciprocal: there are NaNs in the new COEFFS, pre-condition not met
+Traceback (most recent call last):
+  File "/home/jiang861/DeepT/Robustness-Verification-for-Transformers/Verifiers/FirstKVerifier.py", line 143, in get_output_difference_bounds
+    Z_logits_P = self._propagate_path(Z_input.clone(), self.target_unified.unpruned_blocks, apply_pruning=False)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jiang861/DeepT/Robustness-Verification-for-Transformers/Verifiers/FirstKVerifier.py", line 266, in _propagate_path
+    Z_attn_output = self._bound_attention_custom(Z_normed_attn, attn_module, layer_num=i)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jiang861/DeepT/Robustness-Verification-for-Transformers/Verifiers/FirstKVerifier.py", line 333, in _bound_attention_custom
+    attention_probs = attention_scores.softmax(verbose=self.verbose, no_constraints=not add_constraint)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jiang861/DeepT/Robustness-Verification-for-Transformers/Verifiers/Zonotope.py", line 1657, in softmax
+    zonotope_softmax = zonotope_sum_exp_diffs.reciprocal(original_implementation=not use_new_reciprocal, y_positive_constraint=add_value_positivity_constraint)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jiang861/DeepT/Robustness-Verification-for-Transformers/Verifiers/Zonotope.py", line 1914, in reciprocal
+    return self.remove_attention_heads_dim().reciprocal(original_implementation, y_positive_constraint).add_attention_heads_dim(A, clone=False)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jiang861/DeepT/Robustness-Verification-for-Transformers/Verifiers/Zonotope.py", line 2088, in reciprocal
+    assert not torch.isnan(NEW_COEFFS[different_bool]).any(), "Reciprocal: there are NaNs in the new COEFFS, pre-condition not met"
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Reciprocal: there are NaNs in the new COEFFS, pre-condition not met
+Verification failed: Propagation returned None.
+  Result: ERROR
+
