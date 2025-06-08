@@ -174,6 +174,34 @@ class FirstKVerifier(Verifier):
                 #print(f"Shape of l_P_prime: {l_P_prime.shape if l_P_prime is not None else 'None'}, Shape of u_P_prime: {u_P_prime.shape if u_P_prime is not None else 'None'}")
 
 
+                print("\n" + "="*20 + " LOGIT ANALYSIS " + "="*20)
+                l_P, u_P = Z_logits_P.concretize()
+                l_P_prime, u_P_prime = Z_logits_P_prime.concretize()
+                print("\n--- Unpruned Path (P) Logits ---")
+                if l_P is not None:
+                    print("Center Logits (P):")
+                    print(Z_logits_P.zonotope_w[0])
+                    print("\nLogit Lower Bounds (P):")
+                    print(l_P)
+                    print("\nLogit Upper Bounds (P):")
+                    print(u_P)
+                else:
+                    print("Could not concretize unpruned path logits.")
+                
+                print("\n--- Pruned Path (P') Logits ---")
+                if l_P_prime is not None:
+                    print("Center Logits (P'):")
+                    print(Z_logits_P_prime.zonotope_w[0])
+                    print("\nLogit Lower Bounds (P'):")
+                    print(l_P_prime)
+                    print("\nLogit Upper Bounds (P'):")
+                    print(u_P_prime)
+                else:
+                    print("Could not concretize pruned path logits.")
+
+                print("="*58 + "\n") # Separator
+
+
 
                 Z_diff = Z_logits_P.subtract(Z_logits_P_prime)
                 #print(f"Shape of Z_diff before concretize: {Z_diff.zonotope_w.shape if hasattr(Z_diff, 'zonotope_w') else 'No zonotope_w'}")
