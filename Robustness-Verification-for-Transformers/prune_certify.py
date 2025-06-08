@@ -34,8 +34,6 @@ def main():
 
     test_data_loader = mnist_test_dataloader(batch_size=1, shuffle=False) 
 
-    set_seeds(args.seed)
-
     device = torch.device("cuda" if torch.cuda.is_available() and args.gpu !=-1 else "cpu")
     args.device = device 
     model = JointModel(
