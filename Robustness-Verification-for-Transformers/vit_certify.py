@@ -37,7 +37,7 @@ from data_utils import set_seeds  # noqa
 
 set_seeds(args.seed)
 
-test_data = mnist_test_dataloader(batch_size=1, shuffle=True)
+test_data = mnist_test_dataloader(batch_size=1, shuffle=False)
 
 set_seeds(args.seed)
 
