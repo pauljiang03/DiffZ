@@ -61,7 +61,8 @@ class FeedForward(nn.Module):
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(dim, hidden_dim),
-            nn.ReLU(),
+            #nn.ReLU(),
+            nn.GELU(),
             nn.Dropout(dropout),
             nn.Linear(hidden_dim, dim),
             nn.Dropout(dropout)
