@@ -32,7 +32,7 @@ def main():
 
     set_seeds(args.seed)
 
-    test_data_loader = mnist_test_dataloader(batch_size=1, shuffle=True) 
+    test_data_loader = mnist_test_dataloader(batch_size=1, shuffle=False) 
 
     set_seeds(args.seed)
 
