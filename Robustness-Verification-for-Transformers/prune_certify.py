@@ -50,7 +50,7 @@ def main():
         heads=args.num_attention_heads, 
         mlp_dim=args.intermediate_size, 
         layer_norm_type=args.layer_norm, 
-        dropout=args.dropout if hasattr(args, 'dropout') else 0.0
+        dropout=args.dropout if hasattr(args, 'dropout') else 0.0,
         pool = 'mean'
     ).to(device)
 
