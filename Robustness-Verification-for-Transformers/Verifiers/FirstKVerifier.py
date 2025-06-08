@@ -114,6 +114,19 @@ class FirstKVerifier(Verifier):
                     print("Verification failed: Concretization returned None.")
                     is_within_bounds = None
                 else:
+                    print("\n--- Difference Zonotope (P - P') Bounds ---")
+                    print("Lower Bound of Difference (l_diff):")
+                    print(l)
+                    print("\nUpper Bound of Difference (u_diff):")
+                    print(u)
+                    print("-" * 45)
+                    
+                    max_abs_val = torch.max(torch.abs(l), torch.abs(u))
+                    max_abs_diff_bound = max_abs_val.max().item()
+
+                    tolerance = 1e-6
+                    is_within_bounds = (max_abs_diff_bound < output_epsilon - tolerance)
+
                     max_abs_val = torch.max(torch.abs(l), torch.abs(u))
                     max_abs_diff_bound = max_abs_val.max().item()
 
