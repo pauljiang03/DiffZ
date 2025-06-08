@@ -412,7 +412,7 @@ class FirstKVerifier(Verifier):
          return x
 
 
-    def _bound_pooling_unified(self, bounds: Zonotope) -> Zonotope:
+    '''def _bound_pooling_unified(self, bounds: Zonotope) -> Zonotope:
          if bounds.zonotope_w.ndim == 4:
              bounds = bounds.remove_attention_heads_dim()
 
@@ -429,7 +429,20 @@ class FirstKVerifier(Verifier):
 
          pooled_z = make_zonotope_new_weights_same_args(pooled_weights, source_zonotope=bounds, clone=False)
          pooled_z.num_words = 1
-         return pooled_z
+         return pooled_z'''
+
+    def _bound_pooling_unified(self, bounds: Zonotope) -> Zonotope:
+        if bounds.zonotope_w.ndim == 4:
+            bounds = bounds.remove_attention_heads_dim()
+        seq_dim = 1
+
+        sequence_tokens_weights = bounds.zonotope_w[:, 1:, :]
+        pooled_weights = torch.mean(sequence_tokens_weights, dim=seq_dim, keepdim=True)
+        if pooled_weights.shape[seq_dim] != 1:
+            raise ValueError(f"Pooling resulted in unexpected sequence length: {pooled_weights.shape[seq_dim]}")
+        pooled_z = make_zonotope_new_weights_same_args(pooled_weights, source_zonotope=bounds, clone=False)
+        pooled_z.num_words = 1
+        return pooled_z
 
 
     def _bound_classifier_unified(self, bounds: Zonotope) -> Zonotope:
