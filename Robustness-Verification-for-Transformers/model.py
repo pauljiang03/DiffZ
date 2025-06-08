@@ -109,7 +109,7 @@ class JointModel(nn.Module):
     def __init__(self, k: int = 100, img_size: int = 28, embed_dim: int = 64, num_classes: int = 10,
                  in_chans: int = 1, depth: int = 1, heads: int = 4, mlp_dim: int = 128,
                  pruning_layer: int = 0, layer_norm_type: str = 'no_var', dropout: float = 0.0,
-                 patch_size: int = 7, pool: str = 'cls'):
+                 patch_size: int = 7, pool: str = 'cls', dim_head: int = 64):
         super().__init__()
 
         self.k = k
@@ -123,11 +123,12 @@ class JointModel(nn.Module):
         self.patch_size = patch_size
         self.pool = pool
         self.num_classes = num_classes
+        self.dim_head = dim_head
 
         num_patches = (img_size // patch_size) ** 2
         patch_dim = in_chans * patch_size ** 2
         self.num_patches = num_patches
-        dim_head = embed_dim // heads
+        #dim_head = embed_dim // heads
        
         self.patch_embedder_rearrange = Rearrange('b c (h p1) (w p2) -> b (h w) (p1 p2 c)', p1=patch_size, p2=patch_size)
         self.patch_embedder_linear = nn.Linear(patch_dim, embed_dim)
