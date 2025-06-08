@@ -7,48 +7,6 @@ from termcolor import colored
 
 PREFIX_TOKEN_COUNT = 1
 
-
-def load_from_original_vit(self, path: str):
-    print("Loading weights from original ViT checkpoint...")
-    pretrained_state_dict = torch.load(path)
-    new_state_dict = {}
-    for key, value in pretrained_state_dict.items():
-        new_key = key
-        if key.startswith('to_patch_embedding.1.'):
-            new_key = key.replace('to_patch_embedding.1.', 'patch_embedder_linear.')
-        elif key.startswith('mlp_head.0.'):
-            new_key = key.replace('mlp_head.0.', 'final_norm.')
-        elif key.startswith('mlp_head.1.'):
-            new_key = key.replace('mlp_head.1.', 'classification_head.')
-        elif key.startswith('transformer.layers.'):
-            parts = key.split('.')
-            layer_idx = parts[2]
-            block_type_idx = parts[3]
-            if block_type_idx == '0': 
-                rest_of_key = '.'.join(parts[4:])
-                new_key = f"unpruned_blocks.{layer_idx}.attn.{rest_of_key}"
-            elif block_type_idx == '1': 
-                rest_of_key = '.'.join(parts[4:])
-                new_key = f"unpruned_blocks.{layer_idx}.ff.{rest_of_key}"
-            
-        elif key == 'pos_embedding':
-            new_key = 'pos_embed'
-        elif key == 'cls_token':
-            new_key = 'prefix_tokens'
-            
-        new_state_dict[new_key] = value
-    
-    missing_keys, unexpected_keys = self.load_state_dict(new_state_dict, strict=False)
-    if missing_keys:
-        print(colored("Warning: The following keys were missing from the new state_dict:", "yellow"))
-        for k in missing_keys: print(f"  {k}")
-    if unexpected_keys:
-        print(colored("Warning: The following keys in the new state_dict were not used by the model:", "yellow"))
-        for k in unexpected_keys: print(f"  {k}")
-            
-    self._initialize_with_same_weights()
-    print("Successfully loaded and mapped weights.")
-
 def FirstKPrune(x: torch.Tensor, k: int) -> torch.Tensor:
     num_prefix_tokens = PREFIX_TOKEN_COUNT
     total_seq_len = x.size(1)
@@ -191,6 +149,47 @@ class JointModel(nn.Module):
         ])
 
         self._initialize_with_same_weights()
+
+    def load_from_original_vit(self, path: str):
+        print("Loading weights from original ViT checkpoint...")
+        pretrained_state_dict = torch.load(path)
+        new_state_dict = {}
+        for key, value in pretrained_state_dict.items():
+            new_key = key
+            if key.startswith('to_patch_embedding.1.'):
+                new_key = key.replace('to_patch_embedding.1.', 'patch_embedder_linear.')
+            elif key.startswith('mlp_head.0.'):
+                new_key = key.replace('mlp_head.0.', 'final_norm.')
+            elif key.startswith('mlp_head.1.'):
+                new_key = key.replace('mlp_head.1.', 'classification_head.')
+            elif key.startswith('transformer.layers.'):
+                parts = key.split('.')
+                layer_idx = parts[2]
+                block_type_idx = parts[3]
+                if block_type_idx == '0': 
+                    rest_of_key = '.'.join(parts[4:])
+                    new_key = f"unpruned_blocks.{layer_idx}.attn.{rest_of_key}"
+                elif block_type_idx == '1': 
+                    rest_of_key = '.'.join(parts[4:])
+                    new_key = f"unpruned_blocks.{layer_idx}.ff.{rest_of_key}"
+            
+            elif key == 'pos_embedding':
+                new_key = 'pos_embed'
+            elif key == 'cls_token':
+                new_key = 'prefix_tokens'
+            
+            new_state_dict[new_key] = value
+    
+        missing_keys, unexpected_keys = self.load_state_dict(new_state_dict, strict=False)
+        if missing_keys:
+            print(colored("Warning: The following keys were missing from the new state_dict:", "yellow"))
+            for k in missing_keys: print(f"  {k}")
+        if unexpected_keys:
+            print(colored("Warning: The following keys in the new state_dict were not used by the model:", "yellow"))
+            for k in unexpected_keys: print(f"  {k}")
+            
+        self._initialize_with_same_weights()
+        print("Successfully loaded and mapped weights.")
 
     def _initialize_with_same_weights(self):
         self.pruned_blocks.load_state_dict(self.unpruned_blocks.state_dict())
