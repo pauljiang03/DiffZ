@@ -41,7 +41,7 @@ def main():
     try:
         joint_model = JointModel(
             depth=1, num_classes=10, embed_dim=64, mlp_dim=128,
-            heads=4, dim_head=64, layer_norm_type='no_var', pool='mean',
+            heads=4, dim_head=64, layer_norm_type='no_var', pool='cls',
             k=15, pruning_layer=0 # Add any other necessary default args
         ).to(device)
         joint_model.load_from_original_vit("mnist_transformer.pt")
