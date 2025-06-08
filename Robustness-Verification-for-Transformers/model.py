@@ -195,6 +195,16 @@ class JointModel(nn.Module):
     def _initialize_with_same_weights(self):
         self.pruned_blocks.load_state_dict(self.unpruned_blocks.state_dict())
 
+    def _pruned_forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self._common_preprocessing(x)
+        for i, block in enumerate(self.unpruned_blocks):
+            x = block(x)
+            if i == self.pruning_layer:
+                x = FirstKPrune(x, self.k)
+                
+        x = self._apply_pooling_and_head(x)
+        return x
+
     def _common_preprocessing(self, x: torch.Tensor) -> torch.Tensor:
         x = self.patch_embedder_rearrange(x)
         x = self.patch_embedder_linear(x)
