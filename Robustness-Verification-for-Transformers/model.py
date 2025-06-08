@@ -217,7 +217,8 @@ class JointModel(nn.Module):
 
     def _apply_pooling_and_head(self, x: torch.Tensor) -> torch.Tensor:
          if self.pool == 'mean':
-             x = x[:, PREFIX_TOKEN_COUNT:, :].mean(dim=1) 
+             #x = x[:, PREFIX_TOKEN_COUNT:, :].mean(dim=1) 
+             x = x.mean(dim=1)
          else: 
              x = x[:, 0]
          x = self.final_norm(x)
