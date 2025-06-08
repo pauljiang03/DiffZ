@@ -53,6 +53,7 @@ def main():
         dropout=args.dropout if hasattr(args, 'dropout') else 0.0
     ).to(device)
 
+    model.load_from_original_vit("mnist_transformer.pt")
 
     model.eval()
 
