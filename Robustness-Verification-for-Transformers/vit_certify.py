@@ -45,7 +45,7 @@ set_seeds(args.seed)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # model = ViT(image_size=28, patch_size=7, num_classes=10, channels=1,
 #             dim=64, depth=3, heads=4, mlp_dim=128, layer_norm_type="no_var").to(device)
-model = ViT(image_size=28, patch_size=7, num_classes=10, channels=1,
+model = ViT(image_size=28, patch_size=7, num_classes=2, channels=1,
             dim=64, depth=1, heads=4, mlp_dim=128, layer_norm_type="no_var").to(device)
 
 model.load_state_dict(torch.load("mnist_transformer.pt"))
