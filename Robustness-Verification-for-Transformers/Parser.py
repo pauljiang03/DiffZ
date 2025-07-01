@@ -163,6 +163,10 @@ class Parser(object):
         # ViT Verification
         parser.add_argument("--concretize-special-norm-error-together", action="store_true")
 
+
+        parser.add_argument("--sample_index", type=int, default=-1, help="Index of the specific sample to verify from the dataset.")
+
+
         return parser
 
 
