@@ -2660,12 +2660,12 @@ def process_values(input_zonotope_w: torch.Tensor, source_zonotope: "Zonotope", 
 
     ### Step 2: compute all the exp(xj - xi)
     # End shape: (1 + num_error_terms, A * num_rows, num_values * num_values)?
-    print("\n--- DEBUG process_values: Input to exp_minimal_area ('zonotope_diffs') ---")
+    #print("\n--- DEBUG process_values: Input to exp_minimal_area ('zonotope_diffs') ---")
     l_zd, u_zd = zonotope_diffs.concretize()
-    if l_zd is not None:
-        print(f"zonotope_diffs Lower - Min: {l_zd.min().item():.4e}, Max: {l_zd.max().item():.4e}, Mean: {l_zd.mean().item():.4e}, NaNs: {torch.isnan(l_zd).sum().item()}, Infs: {torch.isinf(l_zd).sum().item()}")
-    if u_zd is not None: # Similar for u_zd
-        print(f"zonotope_diffs Upper - Min: {u_zd.min().item():.4e}, Max: {u_zd.max().item():.4e}, Mean: {u_zd.mean().item():.4e}, NaNs: {torch.isnan(u_zd).sum().item()}, Infs: {torch.isinf(u_zd).sum().item()}")
+    #if l_zd is not None:
+        #print(f"zonotope_diffs Lower - Min: {l_zd.min().item():.4e}, Max: {l_zd.max().item():.4e}, Mean: {l_zd.mean().item():.4e}, NaNs: {torch.isnan(l_zd).sum().item()}, Infs: {torch.isinf(l_zd).sum().item()}")
+    #if u_zd is not None: # Similar for u_zd
+        #print(f"zonotope_diffs Upper - Min: {u_zd.min().item():.4e}, Max: {u_zd.max().item():.4e}, Mean: {u_zd.mean().item():.4e}, NaNs: {torch.isnan(u_zd).sum().item()}, Infs: {torch.isinf(u_zd).sum().item()}")
 
 
 
