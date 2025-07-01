@@ -5,25 +5,40 @@ import sys
 import json
 
 def parse_bounds_from_output(output_text):
-    """Parses lower and upper bound vectors from the verifier's stdout."""
+    """
+    Parses lower and upper bound vectors from the verifier's stdout.
+    This version uses string finding and slicing to be more robust.
+    """
     try:
-        # Regex to find the content inside tensor([[...]])
-        lower_match = re.search(r"Lower Bound of Difference \(l_diff\):\s*tensor\(\[\[(.*?)\]\]", output_text)
-        upper_match = re.search(r"Upper Bound of Difference \(u_diff\):\s*tensor\(\[\[(.*?)\]\]", output_text)
+        # Define the headers we are looking for
+        l_header = "Lower Bound of Difference (l_diff):"
+        u_header = "Upper Bound of Difference (u_diff):"
 
-        if not lower_match or not upper_match:
+        # Find the starting position of each header
+        l_start_index = output_text.find(l_header)
+        u_start_index = output_text.find(u_header)
+
+        # If either header is not found, parsing fails
+        if l_start_index == -1 or u_start_index == -1:
             return None, None
 
-        # Extract the comma-separated numbers and convert them to a numpy array
-        l_str = lower_match.group(1).strip()
-        u_str = upper_match.group(1).strip()
+        # Find the content within the brackets for the lower bound
+        l_bracket_open = output_text.find('[[', l_start_index)
+        l_bracket_close = output_text.find(']]', l_bracket_open)
+        l_str = output_text[l_bracket_open + 2 : l_bracket_close]
 
+        # Find the content within the brackets for the upper bound
+        u_bracket_open = output_text.find('[[', u_start_index)
+        u_bracket_close = output_text.find(']]', u_bracket_open)
+        u_str = output_text[u_bracket_open + 2 : u_bracket_close]
+
+        # Convert the string of numbers into a numpy array
         lower_bound = np.fromstring(l_str, sep=',')
         upper_bound = np.fromstring(u_str, sep=',')
         
         return lower_bound, upper_bound
     except Exception as e:
-        print(f"Error parsing bounds from output: {e}")
+        print(f"Error during manual parsing: {e}")
         return None, None
 
 def run_single_verification(case_num, config):
