@@ -164,7 +164,7 @@ class FirstKVerifier(Verifier):
                 if l_P is not None and u_P is not None:
                     max_abs_P = torch.max(torch.abs(l_P), torch.abs(u_P)).max().item()
                     #print(f"  Max abs bound (Unpruned Path P): {max_abs_P:.6f}")
-                else:
+                #else:
                     #print("  Concretization failed for Unpruned Path P.")
                 #print(f"Shape of l_P: {l_P.shape if l_P is not None else 'None'}, Shape of u_P: {u_P.shape if u_P is not None else 'None'}")
 
