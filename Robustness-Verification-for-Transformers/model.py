@@ -181,7 +181,7 @@ class JointModel(nn.Module):
             
             new_state_dict[new_key] = value
     
-        #missing_keys, unexpected_keys = self.load_state_dict(new_state_dict, strict=False)
+        missing_keys, unexpected_keys = self.load_state_dict(new_state_dict, strict=False)
         #if missing_keys:
             #print(colored("Warning: The following keys were missing from the new state_dict:", "yellow"))
             #for k in missing_keys: print(f"  {k}")
