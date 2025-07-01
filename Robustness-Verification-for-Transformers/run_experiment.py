@@ -80,7 +80,7 @@ def run_single_verification(case_num, config):
         return {}
 
     return parse_all_bounds(result.stdout)
-
+'''
 def main():
     """Main function to load config, run experiment, and compute statistics."""
     try:
@@ -150,6 +150,54 @@ def main():
         print(f"  -> Minimum Vector: {np.min(matrix, axis=0)}")
         print(f"  -> Maximum Vector: {np.max(matrix, axis=0)}")
         print(f"  -> Median Vector:  {np.median(matrix, axis=0)}")
+'''
+# In run_experiment.py
+
+def main():
+    """Main function to load config, run experiment, and compute statistics."""
+    try:
+        with open('config.json', 'r') as f:
+            config = json.load(f)
+    except FileNotFoundError:
+        print("FATAL: config.json not found. Please create it before running.")
+        return
+
+    print("Starting verification experiment with parameters from config.json... 🧪")
+    
+    max_abs_errors = []
+    
+    num_cases = config['verification_params']['num_cases']
+    for i in range(num_cases):
+        l_bound, u_bound = run_single_verification(i, config)
+        
+        if l_bound is not None and u_bound is not None:
+            max_error_for_run = np.max(np.maximum(np.abs(l_bound), np.abs(u_bound)))
+            max_abs_errors.append(max_error_for_run)
+            print(f"Success! Max absolute error for this run: {max_error_for_run:.6f}")
+        else:
+            print(f"Warning: Could not parse bounds for case {i + 1}. Skipping.")
+            
+    if not max_abs_errors:
+        print("\nExperiment finished, but no data was collected. Please check setup.")
+        return
+    
+    print("\n--- ✅ Experiment Complete ✅ ---")
+    print(f"Total successful cases: {len(max_abs_errors)}/{num_cases}")
+    
+    # --- FINAL STATISTICAL ANALYSIS ---
+    # This section is updated to include Standard Deviation and Quartiles
+    print("\nStatistical Analysis of Maximum Absolute Error:")
+    print(f"  -> Average Error: {np.mean(max_abs_errors):.6f}")
+    print(f"  -> Standard Deviation: {np.std(max_abs_errors):.6f}")
+    print(f"  -> Minimum Error: {np.min(max_abs_errors):.6f}")
+    print(f"  -> 25th Percentile (Q1): {np.percentile(max_abs_errors, 25):.6f}")
+    print(f"  -> Median Error (Q2):  {np.median(max_abs_errors):.6f}")
+    print(f"  -> 75th Percentile (Q3): {np.percentile(max_abs_errors, 75):.6f}")
+    print(f"  -> Maximum Error: {np.max(max_abs_errors):.6f}")
+    print(f"  -> Interquartile Range (IQR): {np.percentile(max_abs_errors, 75) - np.percentile(max_abs_errors, 25):.6f}")
+
+if __name__ == "__main__":
+    main()
 
 
 if __name__ == "__main__":
