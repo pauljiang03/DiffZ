@@ -173,40 +173,42 @@ def main():
     
     num_cases = config['verification_params']['num_cases']
     for i in range(num_cases):
-        # --- THIS IS THE CORRECTED PART ---
-        # The function now returns a dictionary of all bounds, not just two values.
         bounds = run_single_verification(i, config)
         
-        # Check if we got the essential difference bounds back
         if bounds.get("l_diff") is not None and bounds.get("u_diff") is not None:
-            print("Success! Parsed all bounds.")
-            # Store all collected data
+            print(f"Success! Parsed bounds for case {i + 1}.")
             for key, val in bounds.items():
-                # Check if the key exists in our data storage dictionary before appending
                 if key in results_data:
                     results_data[key].append(val)
 
-            # Calculate and store the max absolute error for this run
             max_error_for_run = np.max(np.maximum(np.abs(bounds["l_diff"]), np.abs(bounds["u_diff"])))
             results_data["max_abs_errors"].append(max_error_for_run)
         else:
             print(f"Warning: Could not parse essential bounds for case {i + 1}. Skipping.")
-        # --- END OF CORRECTION ---
             
     if not results_data["max_abs_errors"]:
         print("\nExperiment finished, but no data was collected. Please check setup.")
         return
     
+    successful_runs = len(results_data['max_abs_errors'])
     print("\n--- ✅ Experiment Complete ✅ ---")
-    print(f"Total successful cases: {len(results_data['max_abs_errors'])}/{num_cases}")
+    print(f"Total successful cases: {successful_runs}/{num_cases}")
     
-    # --- FINAL STATISTICAL ANALYSIS ---
+    # --- THIS IS THE FINAL, COMPLETE ANALYSIS BLOCK ---
     print("\n--- Overall Error (P - P') Analysis ---")
     print("Statistical Analysis of Maximum Absolute Error:")
-    print(f"  -> Average Error: {np.mean(results_data['max_abs_errors']):.6f}")
-    print(f"  -> Maximum Error: {np.max(results_data['max_abs_errors']):.6f}")
-    print(f"  -> Minimum Error: {np.min(results_data['max_abs_errors']):.6f}")
-    print(f"  -> Median Error:  {np.median(results_data['max_abs_errors']):.6f}")
+    
+    max_errors_np = np.array(results_data['max_abs_errors'])
+    
+    print(f"  -> Average Error: {np.mean(max_errors_np):.6f}")
+    print(f"  -> Standard Deviation: {np.std(max_errors_np):.6f}")
+    print(f"  -> Minimum Error: {np.min(max_errors_np):.6f}")
+    print(f"  -> 25th Percentile (Q1): {np.percentile(max_errors_np, 25):.6f}")
+    print(f"  -> Median Error (Q2):  {np.median(max_errors_np):.6f}")
+    print(f"  -> 75th Percentile (Q3): {np.percentile(max_errors_np, 75):.6f}")
+    print(f"  -> Maximum Error: {np.max(max_errors_np):.6f}")
+    print(f"  -> Interquartile Range (IQR): {np.percentile(max_errors_np, 75) - np.percentile(max_errors_np, 25):.6f}")
+
 
     # --- Detailed Bound Analysis ---
     for key, data_list in results_data.items():
@@ -221,7 +223,6 @@ def main():
         print(f"  -> Minimum Vector: {np.min(matrix, axis=0)}")
         print(f"  -> Maximum Vector: {np.max(matrix, axis=0)}")
         print(f"  -> Median Vector:  {np.median(matrix, axis=0)}")
-
 
 if __name__ == "__main__":
     main()
