@@ -4,48 +4,47 @@ import re
 import sys
 import json
 
-def parse_bounds_from_output(output_text):
+def parse_all_bounds(output_text):
     """
-    Parses lower and upper bound vectors from the verifier's stdout.
-    This version uses string finding and slicing to be more robust.
+    Parses the bounds for P, P', and their difference from the verifier's stdout.
+    Returns a dictionary containing all found bounds.
     """
+    bounds = {}
     try:
-        # Define the headers we are looking for
-        l_header = "Lower Bound of Difference (l_diff):"
-        u_header = "Upper Bound of Difference (u_diff):"
+        # Define headers for all bounds we want to capture
+        headers = {
+            "l_p": "Logit Lower Bounds (P):",
+            "u_p": "Logit Upper Bounds (P):",
+            "l_p_prime": "Logit Lower Bounds (P'):",
+            "u_p_prime": "Logit Upper Bounds (P'):",
+            "l_diff": "Lower Bound of Difference (l_diff):",
+            "u_diff": "Upper Bound of Difference (u_diff):",
+        }
 
-        # Find the starting position of each header
-        l_start_index = output_text.find(l_header)
-        u_start_index = output_text.find(u_header)
-
-        # If either header is not found, parsing fails
-        if l_start_index == -1 or u_start_index == -1:
-            return None, None
-
-        # Find the content within the brackets for the lower bound
-        l_bracket_open = output_text.find('[[', l_start_index)
-        l_bracket_close = output_text.find(']]', l_bracket_open)
-        l_str = output_text[l_bracket_open + 2 : l_bracket_close]
-
-        # Find the content within the brackets for the upper bound
-        u_bracket_open = output_text.find('[[', u_start_index)
-        u_bracket_close = output_text.find(']]', u_bracket_open)
-        u_str = output_text[u_bracket_open + 2 : u_bracket_close]
-
-        # Convert the string of numbers into a numpy array
-        lower_bound = np.fromstring(l_str, sep=',')
-        upper_bound = np.fromstring(u_str, sep=',')
+        for key, header in headers.items():
+            start_index = output_text.find(header)
+            if start_index != -1:
+                bracket_open = output_text.find('[[', start_index)
+                bracket_close = output_text.find(']]', bracket_open)
+                if bracket_open != -1 and bracket_close != -1:
+                    data_str = output_text[bracket_open + 2 : bracket_close]
+                    bounds[key] = np.fromstring(data_str, sep=',')
         
-        return lower_bound, upper_bound
+        return bounds
+
     except Exception as e:
         print(f"Error during manual parsing: {e}")
-        return None, None
+        return {}
+
 
 def run_single_verification(case_num, config):
     """Runs a single instance of the prune_certify.py script."""
+    # ... (This function's content remains the same as the previous version)
     model_params = config['model_architecture']
     pruning_params = config['pruning_params']
     verif_params = config['verification_params']
+    error_params = config.get('error_reduction', {})
+    solver_params = config.get('solver_params', {})
     
     print(f"--- Running Case {case_num + 1}/{verif_params['num_cases']} (Image Index: {case_num}) ---")
     
@@ -65,23 +64,22 @@ def run_single_verification(case_num, config):
         '--output_epsilon', str(verif_params['output_epsilon']),
     ]
     
+    if error_params.get('method'):
+        command.extend(['--error-reduction-method', error_params['method']])
+    if error_params.get('max_terms'):
+        command.extend(['--max-num-error-terms', str(error_params['max_terms'])])
+        
+    if solver_params.get('add_softmax_sum_constraint'):
+        command.append('--add-softmax-sum-constraint')
+
     result = subprocess.run(command, capture_output=True, text=True, check=False)
     
     if result.returncode != 0:
         print(f"Error running prune_certify.py for case {case_num + 1}:")
         print(result.stderr)
-        return None, None
+        return {}
 
-    lower_bound, upper_bound = parse_bounds_from_output(result.stdout)
-
-    if lower_bound is not None and upper_bound is not None:
-        print(f"Success! Parsed Lower and Upper Bounds.")
-        return lower_bound, upper_bound
-    else:
-        print(f"Warning: Could not parse bounds for case {case_num + 1}.")
-        print("Full output:")
-        print(result.stdout)
-        return None, None
+    return parse_all_bounds(result.stdout)
 
 def main():
     """Main function to load config, run experiment, and compute statistics."""
@@ -94,40 +92,65 @@ def main():
 
     print("Starting verification experiment with parameters from config.json... 🧪")
     
-    lower_bounds_list = []
-    upper_bounds_list = []
+    # Create lists to store all the results
+    results_data = {
+        "l_p": [], "u_p": [],
+        "l_p_prime": [], "u_p_prime": [],
+        "max_abs_errors": []
+    }
     
     num_cases = config['verification_params']['num_cases']
     for i in range(num_cases):
-        l_bound, u_bound = run_single_verification(i, config)
-        if l_bound is not None and u_bound is not None:
-            lower_bounds_list.append(l_bound)
-            upper_bounds_list.append(u_bound)
+        bounds = run_single_verification(i, config)
+        
+        # Check if we got the essential difference bounds back
+        if bounds.get("l_diff") is not None and bounds.get("u_diff") is not None:
+            print("Success! Parsed all bounds.")
+            # Store all collected data
+            for key, val in bounds.items():
+                if key in results_data:
+                    results_data[key].append(val)
+                elif key in ["l_diff", "u_diff"]: # backwards compatibility for max_abs_errors
+                    # pass
+                    pass
+
+
+            # Calculate and store the max absolute error for this run
+            max_error_for_run = np.max(np.maximum(np.abs(bounds["l_diff"]), np.abs(bounds["u_diff"])))
+            results_data["max_abs_errors"].append(max_error_for_run)
+        else:
+            print(f"Warning: Could not parse essential bounds for case {i + 1}. Skipping.")
             
-    if not lower_bounds_list:
+    if not results_data["max_abs_errors"]:
         print("\nExperiment finished, but no data was collected. Please check setup.")
         return
+    
+    print("\n---  Experiment Complete  ---")
+    print(f"Total successful cases: {len(results_data['max_abs_errors'])}/{num_cases}")
+    
+    # --- FINAL STATISTICAL ANALYSIS ---
+    print("\n--- Overall Error (P - P') Analysis ---")
+    print("Statistical Analysis of Maximum Absolute Error:")
+    print(f"  -> Average Error: {np.mean(results_data['max_abs_errors']):.6f}")
+    print(f"  -> Maximum Error: {np.max(results_data['max_abs_errors']):.6f}")
+    print(f"  -> Minimum Error: {np.min(results_data['max_abs_errors']):.6f}")
+    print(f"  -> Median Error:  {np.median(results_data['max_abs_errors']):.6f}")
 
-    # Convert lists of arrays into 2D numpy matrices
-    L_bounds = np.vstack(lower_bounds_list)
-    U_bounds = np.vstack(upper_bounds_list)
-    
-    print("\n--- Experiment Complete ---")
-    print(f"Total successful cases: {len(lower_bounds_list)}/{num_cases}")
-    
-    # --- Statistical Analysis ---
-    # We calculate statistics column-wise for each logit
-    print("\nStatistical Analysis of Lower Bounds (l):")
-    print(f"  -> Average Vector: {np.mean(L_bounds, axis=0)}")
-    print(f"  -> Minimum Vector: {np.min(L_bounds, axis=0)}")
-    print(f"  -> Maximum Vector: {np.max(L_bounds, axis=0)}")
-    print(f"  -> Median Vector:  {np.median(L_bounds, axis=0)}")
-    
-    print("\nStatistical Analysis of Upper Bounds (u):")
-    print(f"  -> Average Vector: {np.mean(U_bounds, axis=0)}")
-    print(f"  -> Minimum Vector: {np.min(U_bounds, axis=0)}")
-    print(f"  -> Maximum Vector: {np.max(U_bounds, axis=0)}")
-    print(f"  -> Median Vector:  {np.median(U_bounds, axis=0)}")
+    # --- Detailed Bound Analysis ---
+    for key, data_list in results_data.items():
+        if key == "max_abs_errors" or not data_list:
+            continue
+        
+        title = key.replace('_', ' ').replace('p prime', "P'").replace('p', 'P').title()
+        print(f"\nStatistical Analysis for {title} Bounds:")
+        
+        # vstack turns the list of 1D arrays into a 2D matrix for analysis
+        matrix = np.vstack(data_list)
+        print(f"  -> Average Vector: {np.mean(matrix, axis=0)}")
+        print(f"  -> Minimum Vector: {np.min(matrix, axis=0)}")
+        print(f"  -> Maximum Vector: {np.max(matrix, axis=0)}")
+        print(f"  -> Median Vector:  {np.median(matrix, axis=0)}")
+
 
 if __name__ == "__main__":
     main()
