@@ -97,7 +97,7 @@ def main():
     L_bounds = np.vstack(lower_bounds_list)
     U_bounds = np.vstack(upper_bounds_list)
     
-    print("\n--- ✅ Experiment Complete ✅ ---")
+    print("\n--- Experiment Complete ---")
     print(f"Total successful cases: {len(lower_bounds_list)}/{num_cases}")
     
     # --- Statistical Analysis ---
