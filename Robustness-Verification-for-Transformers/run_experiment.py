@@ -4,40 +4,45 @@ import re
 import sys
 
 # --- Configuration ---
-GPU_ID = 0 # Tell the script to use GPU 0. Change if you use a different one.
-K_VAL = 16
-PRUNING_LAYER = 1
-HIDDEN_SIZE = 256
-NUM_LAYERS = 12
+# MODIFIED: These values now match the architecture of your saved 'mnist_transformer.pt' file
+# and your successful command-line run.
+GPU_ID = 0
+K_VAL = 15
+PRUNING_LAYER = 0
+NUM_LABELS = 10
+HIDDEN_SIZE = 64
+INTERMEDIATE_SIZE = 128
+NUM_LAYERS = 1
 NUM_HEADS = 4
-INTERMEDIATE_SIZE = 512
-OUTPUT_EPSILON = 0.1 # Target epsilon bound for ||P - P_prime||
 
 # --- Experiment Parameters from your notes ---
 EPSILON = 0.001
 NUM_CASES = 100
+# NOTE: Your successful command used an output_epsilon of 0.1
+OUTPUT_EPSILON = 0.1
 
-def run_single_verification(case_num, epsilon_val):
+def run_single_verification(case_num):
     """
     Runs a single instance of the prune_certify.py script and captures its output.
     """
     print(f"--- Running Case {case_num + 1}/{NUM_CASES} ---")
     
-    # MODIFIED: Command now includes the --gpu flag to ensure the GPU is enabled.
+    # MODIFIED: Command now uses the corrected architectural parameters
     command = [
         sys.executable,
         'prune_certify.py',
         '--verify',
-        '--gpu', str(GPU_ID), # Explicitly tell the script which GPU to use
-        '--eps', str(epsilon_val),
-        '--k', str(K_VAL),
-        '--pruning_layer', str(PRUNING_LAYER),
-        '--output_epsilon', str(OUTPUT_EPSILON),
-        '--samples', '1', 
-        '--hidden_size', str(HIDDEN_SIZE),
+        '--gpu', str(GPU_ID),
         '--num_layers', str(NUM_LAYERS),
-        '--num_attention_heads', str(NUM_HEADS),
+        '--pruning_layer', str(PRUNING_LAYER),
+        '--k', str(K_VAL),
+        '--num_labels', str(NUM_LABELS),
+        '--hidden_size', str(HIDDEN_SIZE),
         '--intermediate_size', str(INTERMEDIATE_SIZE),
+        '--num_attention_heads', str(NUM_HEADS),
+        '--eps', str(EPSILON),
+        '--output_epsilon', str(OUTPUT_EPSILON),
+        '--samples', '1',
     ]
     
     result = subprocess.run(command, capture_output=True, text=True, check=False)
@@ -47,16 +52,16 @@ def run_single_verification(case_num, epsilon_val):
         print(result.stderr)
         return None
 
-    # This regex looks for the logit difference from your model.
-    # We are looking for a line like "max_logit_diff_abs: 0.00123"
-    match = re.search(r"max_logit_diff_abs:\s*([0-9\.]+)", result.stdout)
+    # MODIFIED: Updated the regex to find the correct output from your Verifier
+    # It now looks for "Max Diff Bound: 0.123456"
+    match = re.search(r"Max Diff Bound:\s*([0-9\.-]+)", result.stdout)
     
     if match:
         error_value = float(match.group(1))
-        print(f"Success! Found Error (Logit Diff): {error_value}")
+        print(f"Success! Found Max Diff Bound: {error_value}")
         return error_value
     else:
-        print(f"Warning: Could not parse error value for case {case_num + 1}.")
+        print(f"Warning: Could not parse 'Max Diff Bound' for case {case_num + 1}.")
         print("Full output:")
         print(result.stdout)
         return None
@@ -69,7 +74,7 @@ def main():
     
     errors = []
     for i in range(NUM_CASES):
-        error = run_single_verification(i, EPSILON)
+        error = run_single_verification(i)
         if error is not None:
             errors.append(error)
             
@@ -85,11 +90,11 @@ def main():
     
     print("\n--- ✅ Experiment Complete ✅ ---")
     print(f"Total successful cases: {len(errors)}/{NUM_CASES}")
-    print("\nStatistical Analysis of Error (Logit Difference):")
-    print(f"  -> Average Error: {avg_error:.6f}")
-    print(f"  -> Maximum Error: {max_error:.6f}")
-    print(f"  -> Minimum Error: {min_error:.6f}")
-    print(f"  -> Median Error:  {median_error:.6f}")
+    print("\nStatistical Analysis of 'Max Diff Bound':")
+    print(f"  -> Average: {avg_error:.6f}")
+    print(f"  -> Maximum: {max_error:.6f}")
+    print(f"  -> Minimum: {min_error:.6f}")
+    print(f"  -> Median:  {median_error:.6f}")
 
 if __name__ == "__main__":
     main()
