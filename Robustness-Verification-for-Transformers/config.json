@@ -15,5 +15,12 @@
     "input_epsilon": 0.001,
     "output_epsilon": 0.1,
     "num_cases": 100
+  },
+  "error_reduction": {
+    "method": "box",
+    "max_terms": 14000
+  },
+  "solver_params": {
+    "add_softmax_sum_constraint": true
   }
 }
