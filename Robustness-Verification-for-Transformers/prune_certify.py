@@ -63,6 +63,7 @@ def main():
     logger = FakeLogger() 
 
     print("\nPreparing data...")
+    '''
     data_normalized = []
     num_samples_to_prepare = getattr(args, 'samples', 100) 
     for i, (x, y) in enumerate(test_data_loader):
@@ -73,6 +74,31 @@ def main():
         })
         if i + 1 >= num_samples_to_prepare:
             break
+    '''
+    data_normalized = []
+    
+    # --- REPLACE YOUR OLD LOOP WITH THIS LOGIC ---
+    test_dataset = test_data_loader.dataset
+    if args.sample_index != -1:
+        print(f"Loading specific sample index: {args.sample_index}")
+        x, y = test_dataset[args.sample_index]
+        data_normalized.append({
+            "label": torch.tensor([y]).to(device),
+            "image": x.unsqueeze(0).to(device)
+        })
+    else:
+        # This is the original behavior, in case you don't provide an index
+        print("Loading first 'n' samples from the dataset...")
+        # The default number of samples is 10
+        num_samples_to_prepare = getattr(args, 'samples', 100) 
+        for i, (x, y) in enumerate(test_data_loader):
+            data_normalized.append({
+                "label": y.to(device), 
+                "image": x.to(device)
+            })
+            if i + 1 >= num_samples_to_prepare:
+                break
+                
     print(f"Prepared {len(data_normalized)} samples.")
 
     verifier = FirstKVerifier(
