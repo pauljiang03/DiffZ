@@ -181,13 +181,13 @@ class JointModel(nn.Module):
             
             new_state_dict[new_key] = value
     
-        missing_keys, unexpected_keys = self.load_state_dict(new_state_dict, strict=False)
-        if missing_keys:
-            print(colored("Warning: The following keys were missing from the new state_dict:", "yellow"))
-            for k in missing_keys: print(f"  {k}")
-        if unexpected_keys:
-            print(colored("Warning: The following keys in the new state_dict were not used by the model:", "yellow"))
-            for k in unexpected_keys: print(f"  {k}")
+        #missing_keys, unexpected_keys = self.load_state_dict(new_state_dict, strict=False)
+        #if missing_keys:
+            #print(colored("Warning: The following keys were missing from the new state_dict:", "yellow"))
+            #for k in missing_keys: print(f"  {k}")
+        #if unexpected_keys:
+            #print(colored("Warning: The following keys in the new state_dict were not used by the model:", "yellow"))
+            #for k in unexpected_keys: print(f"  {k}")
             
         self._initialize_with_same_weights()
         print("Successfully loaded and mapped weights.")
