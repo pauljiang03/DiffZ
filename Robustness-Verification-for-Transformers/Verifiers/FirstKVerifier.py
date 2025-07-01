@@ -163,9 +163,9 @@ class FirstKVerifier(Verifier):
                 l_P, u_P = Z_logits_P.concretize()
                 if l_P is not None and u_P is not None:
                     max_abs_P = torch.max(torch.abs(l_P), torch.abs(u_P)).max().item()
-                    print(f"  Max abs bound (Unpruned Path P): {max_abs_P:.6f}")
+                    #print(f"  Max abs bound (Unpruned Path P): {max_abs_P:.6f}")
                 else:
-                    print("  Concretization failed for Unpruned Path P.")
+                    #print("  Concretization failed for Unpruned Path P.")
                 #print(f"Shape of l_P: {l_P.shape if l_P is not None else 'None'}, Shape of u_P: {u_P.shape if u_P is not None else 'None'}")
 
 
@@ -183,36 +183,36 @@ class FirstKVerifier(Verifier):
                     max_abs_P_prime = torch.max(torch.abs(l_P_prime), torch.abs(u_P_prime)).max().item()
                     #print(f"  Max abs bound (Pruned Path P'): {max_abs_P_prime:.6f}")
                 else:
-                    print("  Concretization failed for Pruned Path P'.")
+                    #print("  Concretization failed for Pruned Path P'.")
                 #print(f"Shape of l_P_prime: {l_P_prime.shape if l_P_prime is not None else 'None'}, Shape of u_P_prime: {u_P_prime.shape if u_P_prime is not None else 'None'}")
 
 
-                print("\n" + "="*20 + " LOGIT ANALYSIS " + "="*20)
+                #print("\n" + "="*20 + " LOGIT ANALYSIS " + "="*20)
                 l_P, u_P = Z_logits_P.concretize()
                 l_P_prime, u_P_prime = Z_logits_P_prime.concretize()
                 print("\n--- Unpruned Path (P) Logits ---")
                 if l_P is not None:
-                    print("Center Logits (P):")
-                    print(Z_logits_P.zonotope_w[0])
-                    print("\nLogit Lower Bounds (P):")
-                    print(l_P)
-                    print("\nLogit Upper Bounds (P):")
-                    print(u_P)
+                    #print("Center Logits (P):")
+                    #print(Z_logits_P.zonotope_w[0])
+                    #print("\nLogit Lower Bounds (P):")
+                    #print(l_P)
+                    #print("\nLogit Upper Bounds (P):")
+                    #print(u_P)
                 else:
-                    print("Could not concretize unpruned path logits.")
+                    #print("Could not concretize unpruned path logits.")
                 
-                print("\n--- Pruned Path (P') Logits ---")
+                #print("\n--- Pruned Path (P') Logits ---")
                 if l_P_prime is not None:
-                    print("Center Logits (P'):")
-                    print(Z_logits_P_prime.zonotope_w[0])
-                    print("\nLogit Lower Bounds (P'):")
-                    print(l_P_prime)
-                    print("\nLogit Upper Bounds (P'):")
-                    print(u_P_prime)
+                    #print("Center Logits (P'):")
+                    #print(Z_logits_P_prime.zonotope_w[0])
+                    #print("\nLogit Lower Bounds (P'):")
+                    #print(l_P_prime)
+                    #print("\nLogit Upper Bounds (P'):")
+                    #print(u_P_prime)
                 else:
-                    print("Could not concretize pruned path logits.")
+                    #print("Could not concretize pruned path logits.")
 
-                print("="*58 + "\n") # Separator
+                #print("="*58 + "\n") # Separator
 
 
 
@@ -372,8 +372,8 @@ class FirstKVerifier(Verifier):
                      current_centers = attention_scores.zonotope_w[:, 0, :, :] # Shape: (A, N_q, N_k_dim)
                      attention_scores.zonotope_w[:, 0, :, :] = current_centers - max_u_for_softmax
                  elif attention_scores.zonotope_w.ndim == 3: # Fallback if it's still 3D for some reason
-                     print(f"WARNING: attention_scores.zonotope_w is 3D. Shape: {attention_scores.zonotope_w.shape}")
-                     print(f"Shape of max_u_for_softmax: {max_u_for_softmax.shape}")
+                     #print(f"WARNING: attention_scores.zonotope_w is 3D. Shape: {attention_scores.zonotope_w.shape}")
+                     #print(f"Shape of max_u_for_softmax: {max_u_for_softmax.shape}")
                      attention_scores.zonotope_w[0, :, :] = attention_scores.zonotope_w[0, :, :] - max_u_for_softmax.squeeze(0) # Attempt to make it work if A=1
                  else:
                      print(f"ERROR: Unexpected zonotope_w ndim: {attention_scores.zonotope_w.ndim}")
@@ -381,12 +381,12 @@ class FirstKVerifier(Verifier):
                  print("WARNING: Could not apply softmax stability trick because upper bounds were None.")
 
          add_constraint = hasattr(self.args, 'add_softmax_sum_constraint') and self.args.add_softmax_sum_constraint
-         print("\n--- Debug: attention_scores before softmax ---")
+         #print("\n--- Debug: attention_scores before softmax ---")
          l_as, u_as = attention_scores.concretize()
          if l_as is not None:
-            print(f"attention_scores Lower - Min: {l_as.min().item():.4e}, Max: {l_as.max().item():.4e}, Mean: {l_as.mean().item():.4e}, NaN_count: {torch.isnan(l_as).sum().item()}")
+            #print(f"attention_scores Lower - Min: {l_as.min().item():.4e}, Max: {l_as.max().item():.4e}, Mean: {l_as.mean().item():.4e}, NaN_count: {torch.isnan(l_as).sum().item()}")
          if u_as is not None:
-            print(f"attention_scores Upper - Min: {u_as.min().item():.4e}, Max: {u_as.max().item():.4e}, Mean: {u_as.mean().item():.4e}, NaN_count: {torch.isnan(u_as).sum().item()}")
+            #print(f"attention_scores Upper - Min: {u_as.min().item():.4e}, Max: {u_as.max().item():.4e}, Mean: {u_as.mean().item():.4e}, NaN_count: {torch.isnan(u_as).sum().item()}")
          attention_probs = attention_scores.softmax(verbose=self.verbose, no_constraints=not add_constraint)
 
          value = value.expand_error_terms_to_match_zonotope(attention_probs)
