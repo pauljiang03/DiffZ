@@ -56,13 +56,13 @@ def main():
 
     model.eval()
 
-    print("Arguments:", args)
-    print(f"Device: {device}")
-    print(f"Test Dataset size: {len(test_data_loader.dataset)}") 
+    #print("Arguments:", args)
+    #print(f"Device: {device}")
+    #print(f"Test Dataset size: {len(test_data_loader.dataset)}") 
 
     logger = FakeLogger() 
 
-    print("\nPreparing data...")
+    #print("\nPreparing data...")
     '''
     data_normalized = []
     num_samples_to_prepare = getattr(args, 'samples', 100) 
