@@ -176,7 +176,7 @@ class FirstKVerifier(Verifier):
                 #print(f"Shape of Z_logits_P_prime before concretize: {Z_logits_P_prime.zonotope_w.shape if hasattr(Z_logits_P_prime, 'zonotope_w') else 'No zonotope_w'}")
 
 
-
+'''
                 #print("  Concretizing pruned path bounds")
                 l_P_prime, u_P_prime = Z_logits_P_prime.concretize()
                 if l_P_prime is not None and u_P_prime is not None:
@@ -185,9 +185,9 @@ class FirstKVerifier(Verifier):
                 #else:
                     #print("  Concretization failed for Pruned Path P'.")
                 #print(f"Shape of l_P_prime: {l_P_prime.shape if l_P_prime is not None else 'None'}, Shape of u_P_prime: {u_P_prime.shape if u_P_prime is not None else 'None'}")
+'''
 
-
-                #print("\n" + "="*20 + " LOGIT ANALYSIS " + "="*20)
+                print("\n" + "="*20 + " LOGIT ANALYSIS " + "="*20)
                 l_P, u_P = Z_logits_P.concretize()
                 l_P_prime, u_P_prime = Z_logits_P_prime.concretize()
                 print("\n--- Unpruned Path (P) Logits ---")
