@@ -338,8 +338,8 @@ class Zonotope:
         N_others_reduced   = self.num_error_terms - n_input_to_keep - N_others_unreduced
 
         if N_others_reduced > 0 and N_others_unreduced < 0:
-            print(colored(f'Warning: max num error terms {max_num_error_terms} too low to do a reduction', 'red'))
-            print(colored(f'Warning: reducing instead to min num {self.num_words*self.word_embedding_size + 1} noise symbols', 'red'))
+            #print(colored(f'Warning: max num error terms {max_num_error_terms} too low to do a reduction', 'red'))
+            #print(colored(f'Warning: reducing instead to min num {self.num_words*self.word_embedding_size + 1} noise symbols', 'red'))
             return self.reduce_num_error_terms_box(max_num_error_terms=self.num_words*self.word_embedding_size + n_input_to_keep + 1)
 
         if N_others_reduced > 0 and N_others_unreduced >= 0:
@@ -682,10 +682,10 @@ class Zonotope:
         if not zonotopes_can_have_different_number_noise_symbols:
             if self.num_error_terms < other.num_error_terms:
                 self = self.expand_error_terms_to_match_zonotope(other)
-                print("Dot product: Increasing number of error terms in self")
+                #print("Dot product: Increasing number of error terms in self")
             elif other.num_error_terms < self.num_error_terms:
                 other = other.expand_error_terms_to_match_zonotope(self)
-                print("Dot product: Increasing number of error terms in other")
+                #print("Dot product: Increasing number of error terms in other")
 
         assert self.zonotope_w.ndim == 4, "self should have 4 dims"
         assert other.zonotope_w.ndim == 4, "other should have 4 dims"
@@ -1357,13 +1357,13 @@ class Zonotope:
 
         l, u = self.concretize()
         MAX_EXP_ARG = 10.0 # Adjust this value based on float precision (e.g., 70 for float32 might be safer than 700)
-        print(f"DEBUG exp_minimal_area: Original l min/max: {l.min().item():.2e}/{l.max().item():.2e}, u min/max: {u.min().item():.2e}/{u.max().item():.2e}")
+        #print(f"DEBUG exp_minimal_area: Original l min/max: {l.min().item():.2e}/{l.max().item():.2e}, u min/max: {u.min().item():.2e}/{u.max().item():.2e}")
 
         l = torch.clamp(l, min=-MAX_EXP_ARG, max=MAX_EXP_ARG)
         u = torch.clamp(u, min=-MAX_EXP_ARG, max=MAX_EXP_ARG)
         u = torch.max(u, l) 
 
-        print(f"DEBUG exp_minimal_area: Clamped l min/max: {l.min().item():.2e}/{l.max().item():.2e}, u min/max: {u.min().item():.2e}/{u.max().item():.2e}")
+        #print(f"DEBUG exp_minimal_area: Clamped l min/max: {l.min().item():.2e}/{l.max().item():.2e}, u min/max: {u.min().item():.2e}/{u.max().item():.2e}")
 
         # terms that have new error weights
         different_bool = has_new_error_term = (l != u)
@@ -1666,15 +1666,15 @@ class Zonotope:
             # return zonotope_sum_exp_diffs
 
             ### Step 4: Compute the inverse for all of these sums, thus obtaining all the softmax values
-            print("\n--- Debug: zonotope_sum_exp_diffs (input to reciprocal in softmax) ---")
+            #print("\n--- Debug: zonotope_sum_exp_diffs (input to reciprocal in softmax) ---")
             l_sed, u_sed = zonotope_sum_exp_diffs.concretize()
             if l_sed is not None:
-                print(f"sum_exp_diffs Lower - Min: {l_sed.min().item():.4e}, Max: {l_sed.max().item():.4e}, Mean: {l_sed.mean().item():.4e}, NaN: {torch.isnan(l_sed).sum().item()}, Inf: {torch.isinf(l_sed).sum().item()}")
+                #print(f"sum_exp_diffs Lower - Min: {l_sed.min().item():.4e}, Max: {l_sed.max().item():.4e}, Mean: {l_sed.mean().item():.4e}, NaN: {torch.isnan(l_sed).sum().item()}, Inf: {torch.isinf(l_sed).sum().item()}")
                 problematic_l_indices = torch.where(l_sed <= 1e-9) # Check for very small or non-positive
-                if problematic_l_indices[0].numel() > 0:
-                    print(f"Found {problematic_l_indices[0].numel()} l_sed values <= 1e-9.")
-            if u_sed is not None:
-                print(f"sum_exp_diffs Upper - Min: {u_sed.min().item():.4e}, Max: {u_sed.max().item():.4e}, Mean: {u_sed.mean().item():.4e}, NaN: {torch.isnan(u_sed).sum().item()}, Inf: {torch.isinf(u_sed).sum().item()}")
+                #if problematic_l_indices[0].numel() > 0:
+                   # print(f"Found {problematic_l_indices[0].numel()} l_sed values <= 1e-9.")
+            #if u_sed is not None:
+                #print(f"sum_exp_diffs Upper - Min: {u_sed.min().item():.4e}, Max: {u_sed.max().item():.4e}, Mean: {u_sed.mean().item():.4e}, NaN: {torch.isnan(u_sed).sum().item()}, Inf: {torch.isinf(u_sed).sum().item()}")
             zonotope_softmax = zonotope_sum_exp_diffs.reciprocal(original_implementation=not use_new_reciprocal, y_positive_constraint=add_value_positivity_constraint)
         else:
             # zonotope_with_adjusted_center = self.subtract_max_from_bias()
@@ -1684,7 +1684,7 @@ class Zonotope:
 
             l, u = zonotope_exp.concretize()
             if torch.isnan(l).any():
-                print("Bound have NaN values: Lower - %s values   Upper - %s values" % (torch.isnan(l).sum().item(), torch.isnan(u).sum().item()))
+                #print("Bound have NaN values: Lower - %s values   Upper - %s values" % (torch.isnan(l).sum().item(), torch.isnan(u).sum().item()))
                 l, u = zonotope_exp.concretize()
             assert (l > -1e-9).all(), "Softmax: Exp is negative or 0 (min l = %.9f)" % l.min()
 
