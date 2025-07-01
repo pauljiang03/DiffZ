@@ -164,40 +164,63 @@ def main():
 
     print("Starting verification experiment with parameters from config.json... 🧪")
     
-    max_abs_errors = []
+    # Create lists to store all the results
+    results_data = {
+        "l_p": [], "u_p": [],
+        "l_p_prime": [], "u_p_prime": [],
+        "max_abs_errors": []
+    }
     
     num_cases = config['verification_params']['num_cases']
     for i in range(num_cases):
-        l_bound, u_bound = run_single_verification(i, config)
+        # --- THIS IS THE CORRECTED PART ---
+        # The function now returns a dictionary of all bounds, not just two values.
+        bounds = run_single_verification(i, config)
         
-        if l_bound is not None and u_bound is not None:
-            max_error_for_run = np.max(np.maximum(np.abs(l_bound), np.abs(u_bound)))
-            max_abs_errors.append(max_error_for_run)
-            print(f"Success! Max absolute error for this run: {max_error_for_run:.6f}")
+        # Check if we got the essential difference bounds back
+        if bounds.get("l_diff") is not None and bounds.get("u_diff") is not None:
+            print("Success! Parsed all bounds.")
+            # Store all collected data
+            for key, val in bounds.items():
+                # Check if the key exists in our data storage dictionary before appending
+                if key in results_data:
+                    results_data[key].append(val)
+
+            # Calculate and store the max absolute error for this run
+            max_error_for_run = np.max(np.maximum(np.abs(bounds["l_diff"]), np.abs(bounds["u_diff"])))
+            results_data["max_abs_errors"].append(max_error_for_run)
         else:
-            print(f"Warning: Could not parse bounds for case {i + 1}. Skipping.")
+            print(f"Warning: Could not parse essential bounds for case {i + 1}. Skipping.")
+        # --- END OF CORRECTION ---
             
-    if not max_abs_errors:
+    if not results_data["max_abs_errors"]:
         print("\nExperiment finished, but no data was collected. Please check setup.")
         return
     
     print("\n--- ✅ Experiment Complete ✅ ---")
-    print(f"Total successful cases: {len(max_abs_errors)}/{num_cases}")
+    print(f"Total successful cases: {len(results_data['max_abs_errors'])}/{num_cases}")
     
     # --- FINAL STATISTICAL ANALYSIS ---
-    # This section is updated to include Standard Deviation and Quartiles
-    print("\nStatistical Analysis of Maximum Absolute Error:")
-    print(f"  -> Average Error: {np.mean(max_abs_errors):.6f}")
-    print(f"  -> Standard Deviation: {np.std(max_abs_errors):.6f}")
-    print(f"  -> Minimum Error: {np.min(max_abs_errors):.6f}")
-    print(f"  -> 25th Percentile (Q1): {np.percentile(max_abs_errors, 25):.6f}")
-    print(f"  -> Median Error (Q2):  {np.median(max_abs_errors):.6f}")
-    print(f"  -> 75th Percentile (Q3): {np.percentile(max_abs_errors, 75):.6f}")
-    print(f"  -> Maximum Error: {np.max(max_abs_errors):.6f}")
-    print(f"  -> Interquartile Range (IQR): {np.percentile(max_abs_errors, 75) - np.percentile(max_abs_errors, 25):.6f}")
+    print("\n--- Overall Error (P - P') Analysis ---")
+    print("Statistical Analysis of Maximum Absolute Error:")
+    print(f"  -> Average Error: {np.mean(results_data['max_abs_errors']):.6f}")
+    print(f"  -> Maximum Error: {np.max(results_data['max_abs_errors']):.6f}")
+    print(f"  -> Minimum Error: {np.min(results_data['max_abs_errors']):.6f}")
+    print(f"  -> Median Error:  {np.median(results_data['max_abs_errors']):.6f}")
 
-if __name__ == "__main__":
-    main()
+    # --- Detailed Bound Analysis ---
+    for key, data_list in results_data.items():
+        if key == "max_abs_errors" or not data_list:
+            continue
+        
+        title = key.replace('_', ' ').replace('p prime', "P'").replace('p', 'P').title()
+        print(f"\nStatistical Analysis for {title} Bounds:")
+        
+        matrix = np.vstack(data_list)
+        print(f"  -> Average Vector: {np.mean(matrix, axis=0)}")
+        print(f"  -> Minimum Vector: {np.min(matrix, axis=0)}")
+        print(f"  -> Maximum Vector: {np.max(matrix, axis=0)}")
+        print(f"  -> Median Vector:  {np.median(matrix, axis=0)}")
 
 
 if __name__ == "__main__":
