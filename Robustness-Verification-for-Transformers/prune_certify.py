@@ -50,7 +50,7 @@ def main():
         mlp_dim=args.intermediate_size, 
         layer_norm_type=args.layer_norm, 
         dropout=args.dropout if hasattr(args, 'dropout') else 0.0,
-        #pool = 'mean'
+        pool = 'mean'
     ).to(device)
 
     model.load_from_original_vit("mnist_transformer.pt")
