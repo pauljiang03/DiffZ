@@ -205,9 +205,6 @@ class JointModel(nn.Module):
             x = block(x)
             if i == self.pruning_layer:
                 x = FirstKPrune(x, self.k)
-            
-    x = self._apply_pooling_and_head(x)
-    return x
                 
         x = self._apply_pooling_and_head(x)
         return x
