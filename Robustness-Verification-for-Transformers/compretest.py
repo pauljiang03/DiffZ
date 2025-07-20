@@ -17,7 +17,7 @@ def comprehensive_model_test():
     
     # Load base model
     model = JointModel(
-        k=2,  # This will be changed dynamically
+        k=10, # This will be changed dynamically
         pruning_layer=PRUNING_LAYER,
         pool=POOL,
         img_size=28,
