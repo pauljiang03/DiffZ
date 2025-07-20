@@ -29,8 +29,8 @@ def evaluate_model():
     model.eval()
 
     # --- Evaluation ---
-    # CORRECTED LINE: Set batch_size=1
-    test_loader = mnist_test_dataloader(batch_size=1, shuffle=False)
+    # We can use a larger batch size now for faster evaluation
+    test_loader = mnist_test_dataloader(batch_size=128, shuffle=False)
     correct = 0
     total = 0
 
@@ -38,9 +38,10 @@ def evaluate_model():
         for images, labels in test_loader:
             images, labels = images.to(device), labels.to(device)
             
-            outputs = model(images)
+            # CORRECTED LINE: Call the internal unpruned_forward method
+            outputs = model._unpruned_forward(images)
             
-            # This line will now work correctly with a batch size of 1
+            # This line will now work correctly
             _, predicted = torch.max(outputs.data, 1)
             
             total += labels.size(0)
