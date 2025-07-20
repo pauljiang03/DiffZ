@@ -53,6 +53,11 @@ def main():
         pool = 'mean'
     ).to(device)
 
+    print(f"Model pool setting: {model.pool}")
+    print(f"Model pooling method in _apply_pooling_and_head:")
+    import inspect
+    print(inspect.getsource(model._apply_pooling_and_head))
+
     model.load_from_original_vit("mnist_transformer.pt")
 
     model.eval()
