@@ -244,7 +244,7 @@ class FirstKVerifier(Verifier):
                 Z_diff = Z_logits_P.subtract(Z_logits_P_prime)
                 l_diff, u_diff = Z_diff.concretize()
             
-                 print("\n--- Difference Zonotope (P - P') Bounds ---")
+                print("\n--- Difference Zonotope (P - P') Bounds ---")
                 if l_diff is not None:
                     print("Lower Bound of Difference (l_diff):")
                     print(l_diff.squeeze())
