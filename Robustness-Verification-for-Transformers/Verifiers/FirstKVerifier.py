@@ -103,7 +103,7 @@ class FirstKVerifier(Verifier):
         is_within_bounds = None
 
         try:
-            Z_diff = self.get_output_difference_bounds(image, input_eps)
+            Z_diff = self.get_output_difference_bounds(image, input_eps, example)
 
             if Z_diff is None:
                 print("Verification failed: Propagation returned None.")
@@ -146,7 +146,7 @@ class FirstKVerifier(Verifier):
         return is_within_bounds, max_abs_diff_bound, timing
 
 
-    def get_output_difference_bounds(self, image: torch.Tensor, input_eps: float) -> Optional[Zonotope]:
+    def get_output_difference_bounds(self, image: torch.Tensor, input_eps: float, example: Dict) -> Optional[Zonotope]:
         cleanup_memory()
         try:
             with torch.no_grad():
