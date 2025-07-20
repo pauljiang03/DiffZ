@@ -56,41 +56,58 @@ def main():
     model.load_from_original_vit("mnist_transformer.pt")
 
     model.eval()
-    print("\n=== SIMPLE PRUNING TEST ===")
+    print("\n=== DETAILED PRUNING DEBUG ===")
     test_input = torch.randn(1, 1, 28, 28).to(device)
     
-    # Test 1: FirstKPrune function directly
-    print("Testing FirstKPrune function:")
-    x = torch.randn(1, 17, 64)
-    print(f"Before: {x.shape}")
-    x_pruned = FirstKPrune(x, 1)
-    print(f"After k=1: {x_pruned.shape}")
-    
-    # Test 2: Model with different k values
-    print("\nTesting model with different k values:")
     with torch.no_grad():
+        print(f"Model config: depth={model.depth}, pruning_layer={model.pruning_layer}, k={model.k}")
+        
+        # Step-by-step debugging
         original_k = model.k
+        model.k = 1  # Very aggressive pruning
         
-        # k=16 (should be similar to unpruned)
-        model.k = 16
-        logits_k16 = model._pruned_forward(test_input)
+        # Trace through preprocessing
+        x_prep = model._common_preprocessing(test_input)
+        print(f"After preprocessing: {x_prep.shape}")
         
-        # k=1 (should be very different)
-        model.k = 1
-        logits_k1 = model._pruned_forward(test_input)
+        # Trace through unpruned forward
+        x_unpruned = x_prep.clone()
+        for i, block in enumerate(model.unpruned_blocks):
+            print(f"  Unpruned - Before block {i}: {x_unpruned.shape}")
+            x_unpruned = block(x_unpruned)
+            print(f"  Unpruned - After block {i}: {x_unpruned.shape}")
         
-        # k=0 (most aggressive)
-        model.k = 0
-        logits_k0 = model._pruned_forward(test_input)
+        # Trace through pruned forward
+        x_pruned = x_prep.clone()
+        for i, block in enumerate(model.unpruned_blocks):
+            print(f"  Pruned - Before block {i}: {x_pruned.shape}")
+            x_pruned = block(x_pruned)
+            print(f"  Pruned - After block {i}: {x_pruned.shape}")
+            
+            # Check if pruning should happen here
+            if i == model.pruning_layer:
+                print(f"  *** APPLYING PRUNING at layer {i} with k={model.k} ***")
+                x_before_prune = x_pruned.clone()
+                x_pruned = FirstKPrune(x_pruned, model.k)
+                print(f"  Before pruning: {x_before_prune.shape}")
+                print(f"  After pruning: {x_pruned.shape}")
+                
+                # Check if content actually changed
+                if x_before_prune.shape == x_pruned.shape:
+                    content_changed = not torch.allclose(x_before_prune, x_pruned)
+                    print(f"  Content changed: {content_changed}")
+                else:
+                    print(f"  Shape changed - pruning worked!")
         
-        # Unpruned
-        logits_unpruned = model._unpruned_forward(test_input)
+        # Final outputs
+        unpruned_final = model._apply_pooling_and_head(x_unpruned)
+        pruned_final = model._apply_pooling_and_head(x_pruned)
+        
+        print(f"Final unpruned logits: {unpruned_final}")
+        print(f"Final pruned logits: {pruned_final}")
+        print(f"Max difference: {(unpruned_final - pruned_final).abs().max().item():.8f}")
         
         model.k = original_k  # Restore
-        
-        print(f"Unpruned vs k=16 diff: {(logits_unpruned - logits_k16).abs().max().item():.8f}")
-        print(f"Unpruned vs k=1 diff:  {(logits_unpruned - logits_k1).abs().max().item():.8f}")
-        print(f"Unpruned vs k=0 diff:  {(logits_unpruned - logits_k0).abs().max().item():.8f}")
 
     #print("Arguments:", args)
     #print(f"Device: {device}")
