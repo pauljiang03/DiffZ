@@ -21,6 +21,7 @@ def evaluate_model():
         heads=4,
         mlp_dim=128,
         layer_norm_type='no_var'
+        pool = 'mean'
     ).to(device)
 
     # Load the trained weights
