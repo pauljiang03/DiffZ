@@ -61,58 +61,115 @@ def main():
     model.load_from_original_vit("mnist_transformer.pt")
 
     model.eval()
-    print("\n=== DETAILED PRUNING DEBUG ===")
-    test_input = torch.randn(1, 1, 28, 28).to(device)
+    print("\n=== REPRODUCING STANDALONE TEST IN VERIFICATION ===")
+
+    # Test 1: Reproduce your exact standalone setup
+    print("1. Testing with EXACT standalone parameters:")
+    standalone_model = JointModel(
+        k=2,  # Your standalone uses k=2
+        pruning_layer=0,
+        pool='mean',  # Explicit mean pooling
+        img_size=28,
+        patch_size=7,
+        num_classes=10,
+        in_chans=1,
+        embed_dim=64,
+        depth=1,
+        heads=4,
+        mlp_dim=128,
+        layer_norm_type='no_var'
+    ).to(device)
+    
+    standalone_model.load_from_original_vit("mnist_transformer.pt")
+    standalone_model.eval()
+    
+    # Test on a batch like your standalone code
+    test_loader = mnist_test_dataloader(batch_size=10, shuffle=False)
+    images, labels = next(iter(test_loader))
+    images, labels = images.to(device), labels.to(device)
+    
+    print(f"Testing batch shape: {images.shape}")
     
     with torch.no_grad():
-        print(f"Model config: depth={model.depth}, pruning_layer={model.pruning_layer}, k={model.k}")
+        # Test exactly like your standalone
+        unpruned_outputs = standalone_model._unpruned_forward(images)
+        pruned_outputs = standalone_model._pruned_forward(images)
         
-        # Step-by-step debugging
-        original_k = model.k
-        model.k = 1  # Very aggressive pruning
+        unpruned_preds = torch.max(unpruned_outputs.data, 1)[1]
+        pruned_preds = torch.max(pruned_outputs.data, 1)[1]
         
-        # Trace through preprocessing
-        x_prep = model._common_preprocessing(test_input)
-        print(f"After preprocessing: {x_prep.shape}")
+        print(f"Unpruned predictions: {unpruned_preds}")
+        print(f"Pruned predictions:   {pruned_preds}")
+        print(f"Predictions match: {torch.equal(unpruned_preds, pruned_preds)}")
         
-        # Trace through unpruned forward
+        # Check logit differences
+        logit_diffs = (unpruned_outputs - pruned_outputs).abs().max(dim=1)[0]
+        print(f"Max logit differences per sample: {logit_diffs}")
+        print(f"Overall max logit difference: {logit_diffs.max().item():.8f}")
+    
+    # Test 2: Compare single sample processing
+    print("\n2. Testing single sample (like verification):")
+    single_image = images[0:1]  # Take first sample
+    single_label = labels[0:1]
+    
+    with torch.no_grad():
+        single_unpruned = standalone_model._unpruned_forward(single_image)
+        single_pruned = standalone_model._pruned_forward(single_image)
+        
+        print(f"Single sample unpruned: {single_unpruned}")
+        print(f"Single sample pruned:   {single_pruned}")
+        print(f"Single sample difference: {(single_unpruned - single_pruned).abs().max().item():.8f}")
+    
+    # Test 3: Step by step debugging of a single forward pass
+    print("\n3. Step-by-step debugging:")
+    with torch.no_grad():
+        x = single_image
+        print(f"Input shape: {x.shape}")
+        
+        # Common preprocessing
+        x_prep = standalone_model._common_preprocessing(x)
+        print(f"After preprocessing: {x_prep.shape}, mean: {x_prep.mean().item():.6f}")
+        
+        # Unpruned path
         x_unpruned = x_prep.clone()
-        for i, block in enumerate(model.unpruned_blocks):
-            print(f"  Unpruned - Before block {i}: {x_unpruned.shape}")
+        for i, block in enumerate(standalone_model.unpruned_blocks):
             x_unpruned = block(x_unpruned)
-            print(f"  Unpruned - After block {i}: {x_unpruned.shape}")
+            print(f"Unpruned after block {i}: shape={x_unpruned.shape}, mean={x_unpruned.mean().item():.6f}")
         
-        # Trace through pruned forward
+        # Pruned path  
         x_pruned = x_prep.clone()
-        for i, block in enumerate(model.unpruned_blocks):
-            print(f"  Pruned - Before block {i}: {x_pruned.shape}")
+        for i, block in enumerate(standalone_model.unpruned_blocks):
             x_pruned = block(x_pruned)
-            print(f"  Pruned - After block {i}: {x_pruned.shape}")
-            
-            # Check if pruning should happen here
-            if i == model.pruning_layer:
-                print(f"  *** APPLYING PRUNING at layer {i} with k={model.k} ***")
-                x_before_prune = x_pruned.clone()
-                x_pruned = FirstKPrune(x_pruned, model.k)
-                print(f"  Before pruning: {x_before_prune.shape}")
-                print(f"  After pruning: {x_pruned.shape}")
-                
-                # Check if content actually changed
-                if x_before_prune.shape == x_pruned.shape:
-                    content_changed = not torch.allclose(x_before_prune, x_pruned)
-                    print(f"  Content changed: {content_changed}")
-                else:
-                    print(f"  Shape changed - pruning worked!")
+            print(f"Pruned after block {i}: shape={x_pruned.shape}, mean={x_pruned.mean().item():.6f}")
+            if i == standalone_model.pruning_layer:
+                print(f"  BEFORE pruning: shape={x_pruned.shape}")
+                x_pruned = FirstKPrune(x_pruned, standalone_model.k)
+                print(f"  AFTER pruning: shape={x_pruned.shape}")
         
-        # Final outputs
-        unpruned_final = model._apply_pooling_and_head(x_unpruned)
-        pruned_final = model._apply_pooling_and_head(x_pruned)
+        # Apply pooling and head
+        print(f"\nBefore pooling - Unpruned: shape={x_unpruned.shape}, mean={x_unpruned.mean().item():.6f}")
+        print(f"Before pooling - Pruned: shape={x_pruned.shape}, mean={x_pruned.mean().item():.6f}")
         
-        print(f"Final unpruned logits: {unpruned_final}")
-        print(f"Final pruned logits: {pruned_final}")
-        print(f"Max difference: {(unpruned_final - pruned_final).abs().max().item():.8f}")
+        final_unpruned = standalone_model._apply_pooling_and_head(x_unpruned)
+        final_pruned = standalone_model._apply_pooling_and_head(x_pruned)
         
-        model.k = original_k  # Restore
+        print(f"Final unpruned: {final_unpruned}")
+        print(f"Final pruned:   {final_pruned}")
+        print(f"Final difference: {(final_unpruned - final_pruned).abs().max().item():.8f}")
+    
+    # Test 4: Check if the issue is in _initialize_with_same_weights
+    print("\n4. Checking if block weights are truly identical:")
+    for i, (unpruned_block, pruned_block) in enumerate(zip(standalone_model.unpruned_blocks, standalone_model.pruned_blocks)):
+        weights_identical = True
+        for name, param1 in unpruned_block.named_parameters():
+            param2 = dict(pruned_block.named_parameters())[name]
+            if not torch.equal(param1, param2):
+                weights_identical = False
+                print(f"  Block {i}, {name}: weights differ by {(param1-param2).abs().max().item():.8f}")
+        if weights_identical:
+            print(f"  Block {i}: All weights identical ✓")
+        else:
+            print(f"  Block {i}: Some weights differ ✗")
 
     #print("Arguments:", args)
     #print(f"Device: {device}")
