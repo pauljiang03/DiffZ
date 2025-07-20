@@ -104,10 +104,15 @@ class FirstKVerifier(Verifier):
 
         with torch.no_grad():
             true_unpruned_logits = self.target_unified._unpruned_forward(image)
-            true_prediction = torch.argmax(true_unpruned_logits, dim=-1).item()
+            true_unpruned_prediction = torch.argmax(true_unpruned_logits, dim=-1).item()
+        
+            true_pruned_logits = self.target_unified._pruned_forward(image)
+            true_pruned_prediction = torch.argmax(true_pruned_logits, dim=-1).item()
+
             print(f"\n--- Sanity Check ---")
-            print(f"True model prediction on clean image: {true_prediction}")
-            print("-" * 20)
+            print(f"Real Unpruned Prediction: {true_unpruned_prediction}")
+            print(f"  Real Pruned Prediction: {true_pruned_prediction}")
+            print("-" * 22)
 
         try:
             Z_diff = self.get_output_difference_bounds(image, input_eps, example)
