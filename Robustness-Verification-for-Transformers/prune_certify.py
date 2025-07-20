@@ -55,6 +55,17 @@ def main():
     model.load_from_original_vit("mnist_transformer.pt")
 
     model.eval()
+    print("\n=== TESTING IF PRUNING WORKS ===")
+    test_input = torch.randn(1, 1, 28, 28).to(device)
+    with torch.no_grad():
+        unpruned_out = model._unpruned_forward(test_input)
+        pruned_out = model._pruned_forward(test_input)
+        diff = (unpruned_out - pruned_out).abs().max().item()
+        print(f"Max difference between unpruned and pruned: {diff:.8f}")
+        if diff < 1e-6:
+            print("❌ ERROR: Pruning is NOT working! Outputs are identical.")
+        else:
+            print("✅ OK: Pruning is working.")
 
     #print("Arguments:", args)
     #print(f"Device: {device}")
