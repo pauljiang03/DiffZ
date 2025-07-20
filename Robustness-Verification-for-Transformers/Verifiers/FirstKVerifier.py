@@ -495,7 +495,7 @@ class FirstKVerifier(Verifier):
          pooled_z = make_zonotope_new_weights_same_args(pooled_weights, source_zonotope=bounds, clone=False)
          pooled_z.num_words = 1
          return pooled_z'''
-    '''
+    
     def _bound_pooling_unified(self, bounds: Zonotope) -> Zonotope:
         if bounds.zonotope_w.ndim == 4:
             bounds = bounds.remove_attention_heads_dim()
@@ -532,7 +532,7 @@ class FirstKVerifier(Verifier):
         pooled_z = make_zonotope_new_weights_same_args(pooled_weights, source_zonotope=bounds, clone=False)
         pooled_z.num_words = 1
         return pooled_z
-
+    '''
 
     def _bound_classifier_unified(self, bounds: Zonotope) -> Zonotope:
          if not (bounds.zonotope_w.ndim == 3 and bounds.zonotope_w.shape[1] == 1):
