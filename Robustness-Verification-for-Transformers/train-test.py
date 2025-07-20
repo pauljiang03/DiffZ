@@ -29,7 +29,7 @@ def evaluate_model():
     model.eval()
 
     # --- Evaluation ---
-    # Use a batch size of 1 because the model is not batch-compatible
+    # CORRECTED LINE: Set batch_size=1
     test_loader = mnist_test_dataloader(batch_size=1, shuffle=False)
     correct = 0
     total = 0
@@ -40,7 +40,7 @@ def evaluate_model():
             
             outputs = model(images)
             
-            # The dimension is now 1 because the batch dimension was squeezed
+            # This line will now work correctly with a batch size of 1
             _, predicted = torch.max(outputs.data, 1)
             
             total += labels.size(0)
