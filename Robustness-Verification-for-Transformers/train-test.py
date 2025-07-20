@@ -1,7 +1,6 @@
 import torch
 from model import JointModel  # Your model definition
 from mnist import mnist_test_dataloader
-
 def evaluate_model():
     """Evaluates the base model's accuracy on the MNIST test set."""
     
@@ -10,7 +9,6 @@ def evaluate_model():
     print(f"Using device: {device}")
     
     # Load your model structure
-    # NOTE: Use the same parameters you used in your verification script
     model = JointModel(
         k=10,
         pruning_layer=0,
@@ -31,7 +29,8 @@ def evaluate_model():
     model.eval()
 
     # --- Evaluation ---
-    test_loader = mnist_test_dataloader(batch_size=128, shuffle=False)
+    # Use a batch size of 1 because the model is not batch-compatible
+    test_loader = mnist_test_dataloader(batch_size=1, shuffle=False)
     correct = 0
     total = 0
 
@@ -39,10 +38,9 @@ def evaluate_model():
         for images, labels in test_loader:
             images, labels = images.to(device), labels.to(device)
             
-            # Get model predictions (logits)
             outputs = model(images)
             
-            # Find the class with the highest logit
+            # The dimension is now 1 because the batch dimension was squeezed
             _, predicted = torch.max(outputs.data, 1)
             
             total += labels.size(0)
@@ -53,6 +51,5 @@ def evaluate_model():
     print(f"Total images tested: {total}")
     print(f"Correct predictions: {correct}")
     print(f"Model Accuracy: {accuracy:.2f}%")
-
 if __name__ == "__main__":
     evaluate_model()
