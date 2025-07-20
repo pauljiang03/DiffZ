@@ -591,8 +591,10 @@ class FirstKVerifier(Verifier):
                      print(f"ERROR: Unexpected zonotope_w ndim: {attention_scores.zonotope_w.ndim}")
              else:
                  print("WARNING: Could not apply softmax stability trick because upper bounds were None.")
+         add_constraint = False
 
-         add_constraint = hasattr(self.args, 'add_softmax_sum_constraint') and self.args.add_softmax_sum_constraint
+         #add_constraint = hasattr(self.args, 'add_softmax_sum_constraint') and self.args.add_softmax_sum_constraint
+        
          #print("\n--- Debug: attention_scores before softmax ---")
          l_as, u_as = attention_scores.concretize()
          #if l_as is not None:
