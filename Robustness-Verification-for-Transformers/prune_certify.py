@@ -61,6 +61,13 @@ def main():
     model.load_from_original_vit("mnist_transformer.pt")
 
     model.eval()
+    print(f"DEBUG: Model parameters from args:")
+    print(f"  k={args.k}")
+    print(f"  pruning_layer={args.pruning_layer}")
+    print(f"  depth={args.num_layers}")
+    print(f"  hidden_size={args.hidden_size}")
+    print(f"  num_attention_heads={args.num_attention_heads}")
+    print(f"  intermediate_size={args.intermediate_size}")
     print("\n=== REPRODUCING STANDALONE TEST IN VERIFICATION ===")
 
     # Test 1: Reproduce your exact standalone setup
