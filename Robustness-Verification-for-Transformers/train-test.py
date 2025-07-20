@@ -20,7 +20,7 @@ def evaluate_model():
         depth=1,
         heads=4,
         mlp_dim=128,
-        layer_norm_type='no_var'
+        layer_norm_type='no_var',
         pool = 'mean'
     ).to(device)
 
