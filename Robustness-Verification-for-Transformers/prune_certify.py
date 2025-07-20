@@ -11,6 +11,7 @@ from model import JointModel
 from fake_logger import FakeLogger 
 from mnist import mnist_test_dataloader, normalizer 
 from data_utils import set_seeds
+from model import JointModel, FirstKPrune
 
 def main():
     argv = sys.argv[1:]
