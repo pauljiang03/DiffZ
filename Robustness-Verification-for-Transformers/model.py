@@ -197,15 +197,10 @@ class JointModel(nn.Module):
 
     def _pruned_forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self._common_preprocessing(x)
-        '''for i, block in enumerate(self.unpruned_blocks):
-            x = block(x)
-            if i == self.pruning_layer:
-                x = FirstKPrune(x, self.k)'''
-        for i, block in enumerate(self.pruned_blocks):
+        for i, block in enumerate(self.unpruned_blocks):
             x = block(x)
             if i == self.pruning_layer:
                 x = FirstKPrune(x, self.k)
-                
         x = self._apply_pooling_and_head(x)
         return x
 
