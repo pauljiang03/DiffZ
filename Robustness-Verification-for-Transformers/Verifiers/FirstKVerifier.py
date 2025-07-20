@@ -235,6 +235,11 @@ class FirstKVerifier(Verifier):
 
 
     def check_pruning_bound(self, example, input_eps: float, output_epsilon: float) -> Tuple[Optional[bool], float, float]:
+
+        self.debug_model_forward_passes(example)
+        self.debug_preprocessing_consistency(example["image"].to(self.device))
+        self.debug_block_weights()
+        self.debug_zonotope_vs_concrete(example)
         image = example["image"].to(self.device)
         start_time = time.time()
         max_abs_diff_bound = float('inf')
