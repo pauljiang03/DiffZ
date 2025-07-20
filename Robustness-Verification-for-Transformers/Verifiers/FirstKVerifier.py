@@ -95,6 +95,144 @@ class FirstKVerifier(Verifier):
             self.logger.write(f"Safety Rate: {100.0 * safe_count / total_count:.2f}%")
         results_file.close()
 
+    def debug_model_forward_passes(self, example):
+        """Debug the model forward passes to identify the issue"""
+        image = example["image"].to(self.device)
+        true_label = example["label"].item()
+    
+        print(f"\n=== DEBUGGING FORWARD PASSES ===")
+        print(f"True label: {true_label}")
+        print(f"Image shape: {image.shape}")
+        print(f"Image stats: min={image.min():.6f}, max={image.max():.6f}, mean={image.mean():.6f}")
+            
+        with torch.no_grad():
+            # Test the unified model's individual forward passes
+            print("\n--- Testing Unified Model Forward Passes ---")
+            unpruned_logits = self.target_unified._unpruned_forward(image)
+            pruned_logits = self.target_unified._pruned_forward(image)
+        
+            unpruned_pred = torch.argmax(unpruned_logits, dim=-1).item()
+            pruned_pred = torch.argmax(pruned_logits, dim=-1).item()
+        
+            print(f"Unpruned forward logits: {unpruned_logits}")
+            print(f"Unpruned prediction: {unpruned_pred}")
+            print(f"Pruned forward logits: {pruned_logits}")
+            print(f"Pruned prediction: {pruned_pred}")
+        
+            # Test the unified model's joint forward pass
+            print("\n--- Testing Unified Model Joint Forward Pass ---")
+            joint_result = self.target_unified(image, return_full_info=True)
+            print(f"Joint unpruned logits: {joint_result['unpruned_logits']}")
+            print(f"Joint pruned logits: {joint_result['pruned_logits']}")
+            print(f"Joint unpruned pred: {torch.argmax(joint_result['unpruned_logits'], dim=-1).item()}")
+            print(f"Joint pruned pred: {torch.argmax(joint_result['pruned_logits'], dim=-1).item()}")
+        
+            # Compare individual vs joint
+            print("\n--- Comparing Individual vs Joint Forward Passes ---")
+            unpruned_match = torch.allclose(unpruned_logits, joint_result['unpruned_logits'], rtol=1e-5)
+            pruned_match = torch.allclose(pruned_logits, joint_result['pruned_logits'], rtol=1e-5)
+            print(f"Unpruned logits match: {unpruned_match}")
+            print(f"Pruned logits match: {pruned_match}")
+            
+            if not unpruned_match:
+                diff = unpruned_logits - joint_result['unpruned_logits']
+                print(f"Unpruned difference: {diff} (max abs: {diff.abs().max():.6f})")
+            
+            if not pruned_match:
+                diff = pruned_logits - joint_result['pruned_logits']
+                print(f"Pruned difference: {diff} (max abs: {diff.abs().max():.6f})")
+    
+    def debug_preprocessing_consistency(self, image):
+        """Debug if preprocessing is consistent between paths"""
+        print(f"\n=== DEBUGGING PREPROCESSING ===")
+        
+        # Test preprocessing step by step
+        with torch.no_grad():
+            # Step 1: Patch embedding
+            x1 = self.target_unified.patch_embedder_rearrange(image)
+            x2 = self.target_unified.patch_embedder_linear(x1)
+            print(f"After patch embedding: shape={x2.shape}, mean={x2.mean():.6f}")
+            
+            # Step 2: Add prefix tokens
+            prefix = self.target_unified.prefix_tokens.expand(x2.shape[0], -1, -1)
+            x3 = torch.cat((prefix, x2), dim=1)
+            print(f"After adding prefix: shape={x3.shape}, mean={x3.mean():.6f}")
+            
+            # Step 3: Add positional embeddings
+            current_seq_len = x3.shape[1]
+            pos_embed = self.target_unified.pos_embed[:, :current_seq_len, :]
+            x4 = x3 + pos_embed
+            print(f"After pos embed: shape={x4.shape}, mean={x4.mean():.6f}")
+            
+            # Step 4: Input dropout (should be identity in eval mode)
+            x5 = self.target_unified.input_dropout(x4)
+            print(f"After input dropout: shape={x5.shape}, mean={x5.mean():.6f}")
+            
+            # Compare with _common_preprocessing
+            x_common = self.target_unified._common_preprocessing(image)
+            preprocessing_match = torch.allclose(x5, x_common, rtol=1e-5)
+            print(f"Preprocessing consistency: {preprocessing_match}")
+            
+            if not preprocessing_match:
+                diff = x5 - x_common
+                print(f"Preprocessing difference: max abs = {diff.abs().max():.6f}")
+    
+    def debug_block_weights(self):
+        """Debug if pruned and unpruned blocks actually have the same weights"""
+        print(f"\n=== DEBUGGING BLOCK WEIGHTS ===")
+        
+        for i in range(len(self.target_unified.unpruned_blocks)):
+            unpruned_block = self.target_unified.unpruned_blocks[i]
+            pruned_block = self.target_unified.pruned_blocks[i]
+            
+            # Check all parameters
+            weights_match = True
+            for name, param1 in unpruned_block.named_parameters():
+                param2 = dict(pruned_block.named_parameters())[name]
+                if not torch.allclose(param1, param2, rtol=1e-6):
+                    print(f"Block {i}, parameter {name}: weights differ!")
+                    print(f"  Max diff: {(param1 - param2).abs().max():.8f}")
+                    weights_match = False
+            
+            if weights_match:
+                print(f"Block {i}: weights match ✓")
+            else:
+                print(f"Block {i}: weights DO NOT match ✗")
+    
+    def debug_zonotope_vs_concrete(self, example):
+        """Debug why zonotope center doesn't match concrete forward pass"""
+        image = example["image"].to(self.device)
+        
+        print(f"\n=== DEBUGGING ZONOTOPE VS CONCRETE ===")
+        
+        # Get concrete forward pass
+        with torch.no_grad():
+            concrete_logits = self.target_unified._unpruned_forward(image)
+            concrete_pred = torch.argmax(concrete_logits, dim=-1).item()
+        
+        # Get zonotope bounds with eps=0 (should match concrete)
+        Z_input = self._bound_input_unified(image, eps=0.0)
+        Z_logits = self._propagate_path(Z_input, self.target_unified.unpruned_blocks, apply_pruning=False)
+        
+        if Z_logits is not None:
+            zonotope_center = Z_logits.zonotope_w[0].squeeze()
+            zonotope_pred = torch.argmax(zonotope_center, dim=-1).item()
+            
+            print(f"Concrete logits: {concrete_logits.squeeze()}")
+            print(f"Zonotope center: {zonotope_center}")
+            print(f"Concrete prediction: {concrete_pred}")
+            print(f"Zonotope prediction: {zonotope_pred}")
+            
+            match = torch.allclose(concrete_logits.squeeze(), zonotope_center, rtol=1e-4)
+            print(f"Logits match (rtol=1e-4): {match}")
+            
+            if not match:
+                diff = concrete_logits.squeeze() - zonotope_center
+                print(f"Difference: {diff}")
+                print(f"Max abs difference: {diff.abs().max():.6f}")
+        else:
+            print("Zonotope propagation failed!")
+
 
     def check_pruning_bound(self, example, input_eps: float, output_epsilon: float) -> Tuple[Optional[bool], float, float]:
         image = example["image"].to(self.device)
