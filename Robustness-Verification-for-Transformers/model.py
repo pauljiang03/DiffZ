@@ -7,6 +7,61 @@ from termcolor import colored
 
 PREFIX_TOKEN_COUNT = 1
 
+def debug_pruning_step_by_step(self, x: torch.Tensor) -> dict:
+    """Debug pruning step by step to see where it fails"""
+    print(f"\n=== DEBUGGING PRUNING STEP BY STEP ===")
+    print(f"Model k: {self.k}")
+    print(f"Pruning layer: {self.pruning_layer}")
+    print(f"Total layers: {self.depth}")
+    
+    # Common preprocessing
+    x_prep = self._common_preprocessing(x)
+    print(f"After preprocessing: {x_prep.shape}")
+    
+    results = {}
+    
+    # Unpruned forward
+    x_unpruned = x_prep.clone()
+    for i, block in enumerate(self.unpruned_blocks):
+        x_unpruned = block(x_unpruned)
+        print(f"Unpruned - After block {i}: {x_unpruned.shape}, mean: {x_unpruned.mean().item():.6f}")
+    
+    unpruned_final = self._apply_pooling_and_head(x_unpruned)
+    results['unpruned'] = unpruned_final
+    
+    # Pruned forward - step by step
+    x_pruned = x_prep.clone()
+    for i, block in enumerate(self.unpruned_blocks):  # Make sure you changed this!
+        x_pruned = block(x_pruned)
+        print(f"Pruned - After block {i}: {x_pruned.shape}, mean: {x_pruned.mean().item():.6f}")
+        
+        # Apply pruning at the correct layer
+        if i == self.pruning_layer:
+            print(f"APPLYING PRUNING at layer {i} with k={self.k}")
+            x_before_prune = x_pruned.clone()
+            x_pruned = FirstKPrune(x_pruned, self.k)
+            print(f"Before pruning: {x_before_prune.shape}")
+            print(f"After pruning: {x_pruned.shape}")
+            
+            # Check if pruning actually changed anything
+            if x_before_prune.shape == x_pruned.shape:
+                are_equal = torch.allclose(x_before_prune, x_pruned)
+                print(f"Shapes same, tensors equal: {are_equal}")
+            else:
+                print(f"Shape changed from {x_before_prune.shape} to {x_pruned.shape}")
+    
+    pruned_final = self._apply_pooling_and_head(x_pruned)
+    results['pruned'] = pruned_final
+    
+    # Compare final results
+    diff = unpruned_final - pruned_final
+    print(f"Final logits difference: max_abs = {diff.abs().max().item():.6f}")
+    print(f"Unpruned prediction: {torch.argmax(unpruned_final, dim=-1).item()}")
+    print(f"Pruned prediction: {torch.argmax(pruned_final, dim=-1).item()}")
+    
+    return results
+
+
 def FirstKPrune(x: torch.Tensor, k: int) -> torch.Tensor:
     num_prefix_tokens = PREFIX_TOKEN_COUNT
     total_seq_len = x.size(1)
