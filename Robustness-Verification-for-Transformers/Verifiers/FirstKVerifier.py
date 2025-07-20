@@ -44,6 +44,10 @@ class FirstKVerifier(Verifier):
         self.normalizer = normalizer
         self.results_directory = args.results_directory
 
+        if hasattr(args, 'p') and args.p <= 10:
+            print(f"Changing p from {args.p} to infinity norm to avoid zonotope assertion")
+            args.p = float('inf')
+    
         self.p = args.p if args.p < 10 else float("inf")
         self.input_eps = args.eps
         self.output_epsilon = output_epsilon
