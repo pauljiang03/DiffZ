@@ -55,17 +55,34 @@ def main():
     model.load_from_original_vit("mnist_transformer.pt")
 
     model.eval()
-    print("\n=== TESTING IF PRUNING WORKS ===")
+    print("\n=== TESTING FirstKPrune FUNCTION ===")
+    test_tensor = torch.randn(1, 17, 64)
+    print(f"Original: {test_tensor.shape}")
+    pruned = FirstKPrune(test_tensor, 1)
+    print(f"k=1 result: {pruned.shape} (should be [1, 2, 64])")
+    if pruned.shape[1] != 2:
+        print("❌ FirstKPrune is broken!")
+    else:
+        print("✅ FirstKPrune works")
+    
+    print("\n=== TESTING MODEL PRUNING ===")
     test_input = torch.randn(1, 1, 28, 28).to(device)
     with torch.no_grad():
+        # Test with very aggressive pruning
+        original_k = model.k
+        model.k = 0  # Keep only prefix token
+        
         unpruned_out = model._unpruned_forward(test_input)
         pruned_out = model._pruned_forward(test_input)
+        
+        model.k = original_k  # Restore
+        
         diff = (unpruned_out - pruned_out).abs().max().item()
-        print(f"Max difference between unpruned and pruned: {diff:.8f}")
+        print(f"k=0 max difference: {diff:.8f}")
         if diff < 1e-6:
-            print("❌ ERROR: Pruning is NOT working! Outputs are identical.")
+            print("❌ Model pruning is broken!")
         else:
-            print("✅ OK: Pruning is working.")
+            print("✅ Model pruning works")
 
     #print("Arguments:", args)
     #print(f"Device: {device}")
