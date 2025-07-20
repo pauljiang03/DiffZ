@@ -221,7 +221,7 @@ class FirstKVerifier(Verifier):
                 l_diff, u_diff = Z_diff.concretize()
                 #print(f"Shape of l_diff: {l_diff.shape if l_diff is not None else 'None'}, Shape of u_diff: {u_diff.shape if u_diff is not None else 'None'}")
                 return Z_diff
-                '''
+                
                 print("\n" + "="*20 + " LOGIT ANALYSIS " + "="*20)
                 center_logits_P = Z_logits_P.zonotope_w[0].squeeze() # Logits for the unperturbed input
                 predicted_class_P = torch.argmax(center_logits_P).item()
@@ -253,6 +253,26 @@ class FirstKVerifier(Verifier):
                 else:
                     print("Could not concretize difference logits.")
                 print("="*58 + "\n") # Separator
+                return Z_diff
+                '''
+                print("\n" + "="*18 + " PREDICTION COMPARISON " + "="*18)
+                center_logits_P = Z_logits_P.zonotope_w[0].squeeze()
+                predicted_class_P = torch.argmax(center_logits_P).item()
+                center_probs_P = torch.softmax(center_logits_P, dim=-1)
+                print(f"Unpruned Model (P) Prediction: {predicted_class_P} (Confidence: {center_probs_P[predicted_class_P]:.2%})")
+                center_logits_P_prime = Z_logits_P_prime.zonotope_w[0].squeeze()
+                predicted_class_P_prime = torch.argmax(center_logits_P_prime).item()
+                center_probs_P_prime = torch.softmax(center_logits_P_prime, dim=-1)
+                print(f"  Pruned Model (P') Prediction: {predicted_class_P_prime} (Confidence: {center_probs_P_prime[predicted_class_P_prime]:.2%})")
+                Z_diff = Z_logits_P.subtract(Z_logits_P_prime)
+                l_diff, u_diff = Z_diff.concretize()
+                print("\n--- Certified Difference Bounds (P - P') ---")
+                if l_diff is not None:
+                    max_abs_diff = torch.max(torch.abs(l_diff), torch.abs(u_diff)).max().item()
+                    print(f"Max Logit Difference Bound: {max_abs_diff:.6f}")
+                else:
+                    print("Could not concretize difference logits.")
+                print("="*57 + "\n") # Separator
                 return Z_diff
 
         except Exception as err:
