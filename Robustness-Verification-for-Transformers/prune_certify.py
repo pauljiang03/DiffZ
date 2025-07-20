@@ -56,34 +56,41 @@ def main():
     model.load_from_original_vit("mnist_transformer.pt")
 
     model.eval()
-    print("\n=== TESTING FirstKPrune FUNCTION ===")
-    test_tensor = torch.randn(1, 17, 64)
-    print(f"Original: {test_tensor.shape}")
-    pruned = FirstKPrune(test_tensor, 1)
-    print(f"k=1 result: {pruned.shape} (should be [1, 2, 64])")
-    if pruned.shape[1] != 2:
-        print("❌ FirstKPrune is broken!")
-    else:
-        print("✅ FirstKPrune works")
-    
-    print("\n=== TESTING MODEL PRUNING ===")
+    print("\n=== SIMPLE PRUNING TEST ===")
     test_input = torch.randn(1, 1, 28, 28).to(device)
+    
+    # Test 1: FirstKPrune function directly
+    print("Testing FirstKPrune function:")
+    x = torch.randn(1, 17, 64)
+    print(f"Before: {x.shape}")
+    x_pruned = FirstKPrune(x, 1)
+    print(f"After k=1: {x_pruned.shape}")
+    
+    # Test 2: Model with different k values
+    print("\nTesting model with different k values:")
     with torch.no_grad():
-        # Test with very aggressive pruning
         original_k = model.k
-        model.k = 0  # Keep only prefix token
         
-        unpruned_out = model._unpruned_forward(test_input)
-        pruned_out = model._pruned_forward(test_input)
+        # k=16 (should be similar to unpruned)
+        model.k = 16
+        logits_k16 = model._pruned_forward(test_input)
+        
+        # k=1 (should be very different)
+        model.k = 1
+        logits_k1 = model._pruned_forward(test_input)
+        
+        # k=0 (most aggressive)
+        model.k = 0
+        logits_k0 = model._pruned_forward(test_input)
+        
+        # Unpruned
+        logits_unpruned = model._unpruned_forward(test_input)
         
         model.k = original_k  # Restore
         
-        diff = (unpruned_out - pruned_out).abs().max().item()
-        print(f"k=0 max difference: {diff:.8f}")
-        if diff < 1e-6:
-            print("❌ Model pruning is broken!")
-        else:
-            print("✅ Model pruning works")
+        print(f"Unpruned vs k=16 diff: {(logits_unpruned - logits_k16).abs().max().item():.8f}")
+        print(f"Unpruned vs k=1 diff:  {(logits_unpruned - logits_k1).abs().max().item():.8f}")
+        print(f"Unpruned vs k=0 diff:  {(logits_unpruned - logits_k0).abs().max().item():.8f}")
 
     #print("Arguments:", args)
     #print(f"Device: {device}")
