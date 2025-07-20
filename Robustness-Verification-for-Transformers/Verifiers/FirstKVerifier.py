@@ -186,7 +186,7 @@ class FirstKVerifier(Verifier):
                     print("  Concretization failed for Pruned Path P'.")
                 #print(f"Shape of l_P_prime: {l_P_prime.shape if l_P_prime is not None else 'None'}, Shape of u_P_prime: {u_P_prime.shape if u_P_prime is not None else 'None'}")
 
-
+                '''
                 print("\n" + "="*20 + " LOGIT ANALYSIS " + "="*20)
                 l_P, u_P = Z_logits_P.concretize()
                 l_P_prime, u_P_prime = Z_logits_P_prime.concretize()
@@ -220,6 +220,39 @@ class FirstKVerifier(Verifier):
                 #print(f"Shape of Z_diff before concretize: {Z_diff.zonotope_w.shape if hasattr(Z_diff, 'zonotope_w') else 'No zonotope_w'}")
                 l_diff, u_diff = Z_diff.concretize()
                 #print(f"Shape of l_diff: {l_diff.shape if l_diff is not None else 'None'}, Shape of u_diff: {u_diff.shape if u_diff is not None else 'None'}")
+                return Z_diff
+                '''
+                print("\n" + "="*20 + " LOGIT ANALYSIS " + "="*20)
+                center_logits_P = Z_logits_P.zonotope_w[0].squeeze() # Logits for the unperturbed input
+                predicted_class_P = torch.argmax(center_logits_P).item()
+                center_probs_P = torch.softmax(center_logits_P, dim=-1)
+                print(f"\n--- Unpruned Path (P) for True Label: {example['label'].item()} ---")
+                print(f"Center Prediction: {predicted_class_P} (Confidence: {center_probs_P[predicted_class_P]:.2%})")
+                print("Center Logits (P):")
+                print(center_logits_P)
+                print("\nLogit Probabilities (P):")
+                print(center_probs_P)
+                l_P, u_P = Z_logits_P.concretize()
+                if l_P is not None:
+                    print("\nLogit Lower Bounds (P):")
+                    print(l_P.squeeze())
+                    print("\nLogit Upper Bounds (P):")
+                    print(u_P.squeeze())
+                else:
+                    print("Could not concretize unpruned path logits.")
+                    
+                Z_diff = Z_logits_P.subtract(Z_logits_P_prime)
+                l_diff, u_diff = Z_diff.concretize()
+            
+                 print("\n--- Difference Zonotope (P - P') Bounds ---")
+                if l_diff is not None:
+                    print("Lower Bound of Difference (l_diff):")
+                    print(l_diff.squeeze())
+                    print("\nUpper Bound of Difference (u_diff):")
+                    print(u_diff.squeeze())
+                else:
+                    print("Could not concretize difference logits.")
+                print("="*58 + "\n") # Separator
                 return Z_diff
 
         except Exception as err:
