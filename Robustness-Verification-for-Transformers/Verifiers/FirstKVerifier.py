@@ -495,6 +495,7 @@ class FirstKVerifier(Verifier):
          pooled_z = make_zonotope_new_weights_same_args(pooled_weights, source_zonotope=bounds, clone=False)
          pooled_z.num_words = 1
          return pooled_z'''
+    '''
     def _bound_pooling_unified(self, bounds: Zonotope) -> Zonotope:
         if bounds.zonotope_w.ndim == 4:
             bounds = bounds.remove_attention_heads_dim()
@@ -504,6 +505,30 @@ class FirstKVerifier(Verifier):
         pooled_weights = torch.mean(sequence_tokens_weights, dim=seq_dim, keepdim=True)
         if pooled_weights.shape[seq_dim] != 1:
             raise ValueError(f"Pooling resulted in unexpected sequence length: {pooled_weights.shape[seq_dim]}")
+        pooled_z = make_zonotope_new_weights_same_args(pooled_weights, source_zonotope=bounds, clone=False)
+        pooled_z.num_words = 1
+        return pooled_z
+    '''
+    def _bound_pooling_unified(self, bounds: Zonotope) -> Zonotope:
+        if bounds.zonotope_w.ndim == 4:
+            bounds = bounds.remove_attention_heads_dim()
+
+        seq_dim = 1
+        pool_strategy = self.target_unified.pool
+
+        if pool_strategy == 'cls':
+            slices = [slice(None)] * bounds.zonotope_w.ndim
+            slices[seq_dim] = slice(0, 1)
+            pooled_weights = bounds.zonotope_w[tuple(slices)]
+        elif pool_strategy == 'mean':
+            sequence_tokens_weights = bounds.zonotope_w[:, 1:, :]
+            pooled_weights = torch.mean(sequence_tokens_weights, dim=seq_dim, keepdim=True)
+        else:
+            raise ValueError(f"Unsupported pooling strategy: {pool_strategy}")
+
+        if pooled_weights.shape[seq_dim] != 1:
+            raise ValueError(f"Pooling resulted in unexpected sequence length: {pooled_weights.shape[seq_dim]}")
+
         pooled_z = make_zonotope_new_weights_same_args(pooled_weights, source_zonotope=bounds, clone=False)
         pooled_z.num_words = 1
         return pooled_z
