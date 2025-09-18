@@ -14,7 +14,6 @@ def debug_pruning_step_by_step(self, x: torch.Tensor) -> dict:
     print(f"Pruning layer: {self.pruning_layer}")
     print(f"Total layers: {self.depth}")
     
-    # Common preprocessing
     x_prep = self._common_preprocessing(x)
     print(f"After preprocessing: {x_prep.shape}")
     
@@ -29,13 +28,12 @@ def debug_pruning_step_by_step(self, x: torch.Tensor) -> dict:
     unpruned_final = self._apply_pooling_and_head(x_unpruned)
     results['unpruned'] = unpruned_final
     
-    # Pruned forward - step by step
+    # Pruned forward 
     x_pruned = x_prep.clone()
-    for i, block in enumerate(self.unpruned_blocks):  # Make sure you changed this!
+    for i, block in enumerate(self.unpruned_blocks):  
         x_pruned = block(x_pruned)
         print(f"Pruned - After block {i}: {x_pruned.shape}, mean: {x_pruned.mean().item():.6f}")
         
-        # Apply pruning at the correct layer
         if i == self.pruning_layer:
             print(f"APPLYING PRUNING at layer {i} with k={self.k}")
             x_before_prune = x_pruned.clone()
@@ -43,7 +41,6 @@ def debug_pruning_step_by_step(self, x: torch.Tensor) -> dict:
             print(f"Before pruning: {x_before_prune.shape}")
             print(f"After pruning: {x_pruned.shape}")
             
-            # Check if pruning actually changed anything
             if x_before_prune.shape == x_pruned.shape:
                 are_equal = torch.allclose(x_before_prune, x_pruned)
                 print(f"Shapes same, tensors equal: {are_equal}")
@@ -53,7 +50,6 @@ def debug_pruning_step_by_step(self, x: torch.Tensor) -> dict:
     pruned_final = self._apply_pooling_and_head(x_pruned)
     results['pruned'] = pruned_final
     
-    # Compare final results
     diff = unpruned_final - pruned_final
     print(f"Final logits difference: max_abs = {diff.abs().max().item():.6f}")
     print(f"Unpruned prediction: {torch.argmax(unpruned_final, dim=-1).item()}")
