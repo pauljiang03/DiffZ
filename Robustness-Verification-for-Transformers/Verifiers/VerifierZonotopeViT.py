@@ -68,6 +68,12 @@ class VerifierZonotopeViT(Verifier):
 
         self.ibp = args.method == "ibp"
 
+        ### Pruning
+        self.token_pruning_enabled = getattr(args, 'prune_tokens', False)
+        self.prune_layer_idx = getattr(args, 'prune_layer_idx', -1)
+        self.tokens_to_keep = getattr(args, 'tokens_to_keep', -1)
+        ###
+
         self.showed_warning = False
         self.target: ViT
         self.num_classes = num_classes
@@ -289,6 +295,7 @@ class VerifierZonotopeViT(Verifier):
     def is_in_fast_layer(self, layer_num: int):
         return True
 
+    '''
     def _bound_layer(self, bounds_input: Zonotope, attn, ff, layer_num=-1) -> Tuple[Zonotope, Zonotope, Zonotope, Zonotope]:
         if self.args.log_error_terms_and_time:
             print("Bound_input before error reduction has %d error terms" % bounds_input.num_error_terms)
@@ -336,6 +343,40 @@ class VerifierZonotopeViT(Verifier):
 
 
         return attention_scores, attention_probs, context, output
+    '''
+    ### start prune bound_layer
+    def _bound_layer(self, bounds_input: Zonotope, attn, ff, layer_num=-1) -> Tuple[Zonotope, Zonotope, Zonotope, Zonotope]:
+        if bounds_input.error_term_range_low is not None:
+            bounds_input = bounds_input.recenter_zonotope_and_eliminate_error_term_ranges()
+
+        if self.args.error_reduction_method == 'box':
+            bounds_input = bounds_input.reduce_num_error_terms_box(max_num_error_terms=self.args.max_num_error_terms)
+
+        layer_normed = bounds_input.layer_norm(get_layernorm(attn).norm, get_layernorm(attn).layer_norm_type)
+
+        attention_scores, attention_probs, context, attention_output = self._bound_attention(
+            layer_normed, get_inner(attn), layer_num=layer_num
+        )
+
+        attention_after_residual = attention_output.add(bounds_input)
+
+        if self.token_pruning_enabled and layer_num == self.prune_layer_idx:
+            pruned_zonotope_w = attention_after_residual.zonotope_w[:, :self.tokens_to_keep, :]
+            attention_after_residual = make_zonotope_new_weights_same_args(pruned_zonotope_w, attention_after_residual)
+
+        attention_layer_normed = attention_after_residual.layer_norm(get_layernorm(ff).norm, get_layernorm(ff).layer_norm_type)
+
+        feed_forward = get_inner(ff)
+        intermediate = attention_layer_normed.dense(feed_forward.net[0])
+        intermediate = intermediate.relu()
+        dense = intermediate.dense(feed_forward.net[3])
+        
+        attention_after_residual = attention_after_residual.expand_error_terms_to_match_zonotope(intermediate)
+
+        output = dense.add(attention_after_residual)
+
+        return attention_scores, attention_probs, context, output
+    ### end prune bound_layer
 
     def do_dot_product(self, left_z: Zonotope, right_z: Zonotope, current_layer_num: int):
         if self.args.num_fast_dot_product_layers_due_to_switch == -1:
