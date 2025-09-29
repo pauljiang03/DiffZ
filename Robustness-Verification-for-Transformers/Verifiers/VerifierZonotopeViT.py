@@ -389,7 +389,7 @@ class VerifierZonotopeViT(Verifier):
 
         return attention_scores, attention_probs, context, output
     ### end prune bound_layer
-
+    '''
     def do_dot_product(self, left_z: Zonotope, right_z: Zonotope, current_layer_num: int):
         if self.args.num_fast_dot_product_layers_due_to_switch == -1:
             return left_z.dot_product(right_z, verbose=self.verbose)
@@ -398,7 +398,7 @@ class VerifierZonotopeViT(Verifier):
             return left_z.dot_product_fast(right_z, verbose=self.verbose)
         else:
             return left_z.dot_product_precise(right_z, verbose=self.verbose)
-    '''
+    
     def do_context(self, left_z: Zonotope, right_z: Zonotope, current_layer_num: int):
         return self.do_dot_product(left_z, right_z.t(), current_layer_num)
 
