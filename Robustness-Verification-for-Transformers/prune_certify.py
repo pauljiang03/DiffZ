@@ -13,6 +13,11 @@ if __name__ == "__main__":
     argv = sys.argv[1:]
     parser = Parser.get_parser()
 
+    print("\n--- Parsed Arguments ---")
+    print(args)
+    print("------------------------\n")
+
+
     # --- Arguments to control token pruning ---
     parser.add_argument('--prune_tokens', action='store_true',
                         help='Enable First-K token pruning during verification.')
