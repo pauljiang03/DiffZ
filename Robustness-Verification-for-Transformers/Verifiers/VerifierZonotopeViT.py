@@ -245,20 +245,6 @@ class VerifierZonotopeViT(Verifier):
 
                 bounds = self._bound_pooling(bounds)
                 bounds = self._bound_classifier(bounds)
-
-                print("\n" + "#"*15 + " FINAL LOGIT ANALYSIS (vit_certify) " + "#"*15)
-                l, u = bounds.concretize()
-                if l is not None:
-                    print("Center Logits:")
-                    print(bounds.zonotope_w[0].squeeze())
-                    print("\nLogit Lower Bounds:")
-                    print(l.squeeze())
-                    print("\nLogit Upper Bounds:")
-                    print(u.squeeze())
-                else:
-                    print("Could not concretize final logit bounds.")
-                    print("#"*69 + "\n")
-                
                 return bounds
         except errorType as err:  # for debug
             if self.verbose:
