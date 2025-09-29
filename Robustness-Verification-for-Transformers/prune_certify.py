@@ -48,7 +48,7 @@ if __name__ == "__main__":
 
     # --- Model Loading ---
     model = ViT(image_size=28, patch_size=7, num_classes=10, channels=1,
-                dim=64, depth=3, heads=4, mlp_dim=128, layer_norm_type="no_var").to(device)
+                dim=64, depth=1, heads=4, mlp_dim=128, layer_norm_type="no_var").to(device)
     model.load_state_dict(torch.load("mnist_transformer.pt", map_location=device))
     model.eval()
 
