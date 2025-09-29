@@ -363,6 +363,18 @@ class VerifierZonotopeViT(Verifier):
         attention_after_residual = attention_output.add(bounds_input_expanded)
     
         if self.token_pruning_enabled and layer_num == self.prune_layer_idx:
+
+            print(f"\n!!! DESTRUCTIVE PRUNING a`t layer {layer_num}. Zeroing [CLS] token & keeping {self.tokens_to_keep} tokens. !!!\n")
+        
+            new_weights = attention_after_residual.zonotope_w.clone()
+
+            new_weights[:, 0, :] = 0.0
+
+            pruned_zonotope_w = new_weights[:, :self.tokens_to_keep, :]
+        
+            attention_after_residual = make_zonotope_new_weights_same_args(pruned_zonotope_w, attention_after_residual)
+
+            -----
             pruned_zonotope_w = attention_after_residual.zonotope_w[:, :self.tokens_to_keep, :]
             attention_after_residual = make_zonotope_new_weights_same_args(pruned_zonotope_w, attention_after_residual)
     
