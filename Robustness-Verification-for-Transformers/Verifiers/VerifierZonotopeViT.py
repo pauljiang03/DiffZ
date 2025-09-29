@@ -369,6 +369,7 @@ class VerifierZonotopeViT(Verifier):
     
     # --- First-K Pruning Logic ---
         if self.token_pruning_enabled and layer_num == self.prune_layer_idx:
+            print(f"\n!!! PRUNING ACTIVATED at layer {layer_num}. Keeping {self.tokens_to_keep} tokens. !!!\n")
             pruned_zonotope_w = attention_after_residual.zonotope_w[:, :self.tokens_to_keep, :]
             attention_after_residual = make_zonotope_new_weights_same_args(pruned_zonotope_w, attention_after_residual)
     
