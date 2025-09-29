@@ -346,46 +346,35 @@ class VerifierZonotopeViT(Verifier):
     '''
     ### start prune bound_layer
     def _bound_layer(self, bounds_input: Zonotope, attn, ff, layer_num=-1) -> Tuple[Zonotope, Zonotope, Zonotope, Zonotope]:
-    # --- Preprocessing for tighter bounds ---
         if bounds_input.error_term_range_low is not None:
             bounds_input = bounds_input.recenter_zonotope_and_eliminate_error_term_ranges()
 
         if self.args.error_reduction_method == 'box':
             bounds_input = bounds_input.reduce_num_error_terms_box(max_num_error_terms=self.args.max_num_error_terms)
 
-    # LayerNorm before Attention
         layer_normed = bounds_input.layer_norm(get_layernorm(attn).norm, get_layernorm(attn).layer_norm_type)
 
-    # Self-Attention
         attention_scores, attention_probs, context, attention_output = self._bound_attention(
             layer_normed, get_inner(attn), layer_num=layer_num
         )
 
-    # --- FIX for First Residual Connection ---
-    # Expand the input bounds to match the new error terms from attention
+
         bounds_input_expanded = bounds_input.expand_error_terms_to_match_zonotope(attention_output)
-    # Now, add them together
         attention_after_residual = attention_output.add(bounds_input_expanded)
     
-    # --- First-K Pruning Logic ---
         if self.token_pruning_enabled and layer_num == self.prune_layer_idx:
-            print(f"\n!!! PRUNING ACTIVATED at layer {layer_num}. Keeping {self.tokens_to_keep} tokens. !!!\n")
             pruned_zonotope_w = attention_after_residual.zonotope_w[:, :self.tokens_to_keep, :]
             attention_after_residual = make_zonotope_new_weights_same_args(pruned_zonotope_w, attention_after_residual)
     
-    # LayerNorm before FeedForward
         attention_layer_normed = attention_after_residual.layer_norm(get_layernorm(ff).norm, get_layernorm(ff).layer_norm_type)
 
-    # FeedForward Network
         feed_forward = get_inner(ff)
         intermediate = attention_layer_normed.dense(feed_forward.net[0])
         intermediate = intermediate.relu()
         dense = intermediate.dense(feed_forward.net[3])
     
-    # --- FIX for Second Residual Connection ---
-    # Expand the state after the first residual to match new error terms from the feed-forward network
+
         attention_after_residual_expanded = attention_after_residual.expand_error_terms_to_match_zonotope(intermediate)
-    # Now, add them together
         output = dense.add(attention_after_residual_expanded)
 
         return attention_scores, attention_probs, context, output
