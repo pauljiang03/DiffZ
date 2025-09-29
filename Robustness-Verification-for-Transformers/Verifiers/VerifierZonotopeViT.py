@@ -295,7 +295,7 @@ class VerifierZonotopeViT(Verifier):
     def is_in_fast_layer(self, layer_num: int):
         return True
 
-    #'''
+    '''
     def _bound_layer(self, bounds_input: Zonotope, attn, ff, layer_num=-1) -> Tuple[Zonotope, Zonotope, Zonotope, Zonotope]:
         if self.args.log_error_terms_and_time:
             print("Bound_input before error reduction has %d error terms" % bounds_input.num_error_terms)
@@ -389,7 +389,7 @@ class VerifierZonotopeViT(Verifier):
 
         return attention_scores, attention_probs, context, output
     ### end prune bound_layer
-    '''
+    
     def do_dot_product(self, left_z: Zonotope, right_z: Zonotope, current_layer_num: int):
         if self.args.num_fast_dot_product_layers_due_to_switch == -1:
             return left_z.dot_product(right_z, verbose=self.verbose)
