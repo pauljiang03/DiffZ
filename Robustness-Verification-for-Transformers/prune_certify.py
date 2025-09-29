@@ -13,10 +13,6 @@ if __name__ == "__main__":
     argv = sys.argv[1:]
     parser = Parser.get_parser()
 
-    print("\n--- Parsed Arguments ---")
-    print(args)
-    print("------------------------\n")
-
 
     # --- Arguments to control token pruning ---
     parser.add_argument('--prune_tokens', action='store_true',
@@ -28,6 +24,10 @@ if __name__ == "__main__":
 
     args, _ = parser.parse_known_args(argv)
     args = update_arguments(args)
+
+    print("\n--- Parsed Arguments ---")
+    print(args)
+    print("------------------------\n")
 
     # --- Basic Setup ---
     set_seeds(args.seed)
