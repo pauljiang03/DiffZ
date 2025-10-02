@@ -299,8 +299,14 @@ class DiffVerZonotopeViT(Verifier):
             print(f"[Pruning] Layer {layer_num}: Keeping {self.tokens_to_keep} tokens.")
             # Note: This slicing assumes the tokens to keep are the first self.tokens_to_keep after the CLS token, 
             # and that the CLS token is handled correctly upstream (it is, since attention is the input to this block).
+            print(f"[VERIFY PRUNE] Shape BEFORE Pruning: {attention.zonotope_w.shape}")
+            print(f"[Pruning] Layer {layer_num}: Keeping {self.tokens_to_keep} tokens.")
+            
             pruned_zonotope_w = attention.zonotope_w[:, :self.tokens_to_keep + 1, :]
             attention = make_zonotope_new_weights_same_args(pruned_zonotope_w, attention)
+
+            print(f"[VERIFY PRUNE] Shape AFTER Pruning: {attention.zonotope_w.shape}")
+
 
         attention_layer_normed = attention.layer_norm(get_layernorm(ff).norm, get_layernorm(ff).layer_norm_type)  # prenorm 2
 
