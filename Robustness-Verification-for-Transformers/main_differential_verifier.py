@@ -31,7 +31,7 @@ args.with_lirpa_transformer = False
 args.all_words = True
 args.concretize_special_norm_error_together = True
 args.num_input_error_terms = 28 * 28
-args.samples = 1 
+args.samples = 10
 
 if args.gpu != -1:
     os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
