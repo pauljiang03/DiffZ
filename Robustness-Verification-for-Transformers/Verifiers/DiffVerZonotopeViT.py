@@ -316,7 +316,9 @@ class DiffVerZonotopeViT(Verifier):
         feed_forward = get_inner(ff)
 
         intermediate = attention_layer_normed.dense(feed_forward.net[0])  
+        self._check_num_error_terms(intermediate, "MLP Intermediate (Pre-ReLU)", layer_num)
         intermediate = intermediate.relu()  
+        self._check_num_error_terms(intermediate, "\033[91mMLP Intermediate (Post-ReLU)\033[0m", layer_num)
         dense = intermediate.dense(feed_forward.net[3])  
 
         attention = attention.expand_error_terms_to_match_zonotope(intermediate)
