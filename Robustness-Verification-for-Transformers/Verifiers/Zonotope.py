@@ -1916,6 +1916,12 @@ class Zonotope:
         shape[0] += n_new_error_terms
         transformed_x = torch.zeros(shape, device=self.args.device)
 
+        #REMOVE LATER UNSOUND
+        MAX_RECIPROCAL_ARG = 1e8 # Clamp to 100 million as a test, adjust as needed
+
+        u = torch.clamp(u, max=MAX_RECIPROCAL_ARG)
+        #REMOVE LATER UNSOUND
+
         if original_implementation:
             # upper bound: y <= f(l) + λ * (x - l)
             # lower bound: y >= f(u) + λ * (x - u)
