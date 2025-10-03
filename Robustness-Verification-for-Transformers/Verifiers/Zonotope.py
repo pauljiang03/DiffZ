@@ -1908,6 +1908,11 @@ class Zonotope:
 
         l, u = self.concretize()
 
+        #TEMP
+        width = u - l  
+        #TEMP
+
+
         l_min = l.min().item()
         u_max = u.max().item()
 
