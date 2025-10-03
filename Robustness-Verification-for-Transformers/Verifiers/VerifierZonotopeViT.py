@@ -252,31 +252,14 @@ class VerifierZonotopeViT(Verifier):
                 bounds = self._bound_pooling(bounds)
                 bounds = self._bound_classifier(bounds)
                 return bounds
-        except errorType as err:  # for debug            # THIS CATCHES ASSERTION ERRORS (typically raised when the error term limit is exceeded)
-            # Added flush=True to ensure output is not buffered
-            print("\033[91m" + f"VERIFICATION FAILED at Layer {current_layer_index}: Assertion or Error Term Limit Exceeded." + "\033[0m", flush=True)
-            # The 'bounds' variable should hold the Zonotope right before the failed operation.
-            print(f"Zonotope at time of failure had {bounds.num_error_terms} error terms.", flush=True)
-            print(f"Error details: {err}", flush=True)
-            return None
-        except Exception as e:
-            # THIS CATCHES LOW-LEVEL ERRORS (e.g., CUDA out of memory, or other unhandled exceptions)
-            # Added layer index and flush=True
-            print("\033[91m" + f"VERIFICATION FAILED at Layer {current_layer_index}: Unhandled Exception." + "\033[0m", flush=True)
-            try:
-                # bounds should be defined, but use try/except just in case the failure happened during init
-                print(f"Zonotope at time of failure had {bounds.num_error_terms} error terms.", flush=True)
-            except NameError:
-                 print("Bounds object was not fully initialized before the crash.", flush=True)
-            print(f"Error details: {e}", flush=True)
-            return None
-            '''if self.verbose:
+        except errorType as err:  # for debug
+            if self.verbose:
                 print("Warning: failed assertion")
                 print(err)
             # print("Warning: failed assertion", eps)
             # print(err)
             # raise err
-            return None'''
+            return None
 
     def _bound_input(self, image: torch.Tensor, eps: float) -> Zonotope:
         # Rearrange
@@ -324,11 +307,8 @@ class VerifierZonotopeViT(Verifier):
             bounds_input = bounds_input.recenter_zonotope_and_eliminate_error_term_ranges()
 
         if self.args.error_reduction_method == 'box':
-            self._check_num_error_terms(bounds_input, "Before Box Reduction", layer_num)
             bounds_input_reduced_box = bounds_input.reduce_num_error_terms_box(max_num_error_terms=self.args.max_num_error_terms)
             bounds_input = bounds_input_reduced_box
-            self._check_num_error_terms(bounds_input, "After Box Reduction", layer_num)
-
 
         layer_normed = bounds_input.layer_norm(get_layernorm(attn).norm, get_layernorm(attn).layer_norm_type)  # Layer norm 1
 
@@ -354,16 +334,11 @@ class VerifierZonotopeViT(Verifier):
         feed_forward = get_inner(ff)
 
         intermediate = attention_layer_normed.dense(feed_forward.net[0])  # FeedForward - Linear 1
-        self._check_num_error_terms(intermediate, "MLP Intermediate (Pre-ReLU)", layer_num)
         intermediate = intermediate.relu()  # FeedForward - ReLU
-        self._check_num_error_terms(intermediate, "\033[91mMLP Intermediate (Post-ReLU)\033[0m", layer_num)
         dense = intermediate.dense(feed_forward.net[3])  # FeedForward - Linear 2
-        
 
         attention = attention.expand_error_terms_to_match_zonotope(intermediate)
         dense = dense.add(attention)  # Residual 2
-        self._check_num_error_terms(dense, "After Residual 2", layer_num)
-
 
         if not self.args.keep_intermediate_zonotopes:
             del intermediate
