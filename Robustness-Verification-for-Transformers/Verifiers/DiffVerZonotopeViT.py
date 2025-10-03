@@ -252,9 +252,12 @@ class DiffVerZonotopeViT(Verifier):
                 bounds = self._bound_classifier(bounds)
                 return bounds
         except errorType as err:
-            if self.verbose:
-                print("Warning: failed assertion")
-                print(err)
+            print("\n=========================================================================")
+            print(f"VERIFICATION FAILED: {type(err).__name__} occurred during bounding.")
+            print(f"Current Pruning State (P'): {self.token_pruning_enabled}")
+            print("Error Details:")
+            print(err)
+            print("=========================================================================")
             return None
 
     def _bound_input(self, image: torch.Tensor, eps: float) -> Zonotope:
