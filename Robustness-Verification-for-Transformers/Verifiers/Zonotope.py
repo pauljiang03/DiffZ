@@ -412,6 +412,59 @@ class Zonotope:
         print("max", torch.max(u))
         print()
 
+    def __sub__(self, other):
+        """
+        [Differential Verification] Overloads the subtraction operator (-)
+        to calculate the differential zonotope Z_self - Z_other.
+        
+        The resulting zonotope Z_Delta = Z_self - Z_other soundly bounds 
+        the difference in scores for all possible adversarial inputs.
+        
+        Z_Delta.zonotope_w:
+            Row 0: Center_self - Center_other
+            Row 1 to R1: Generators_self
+            Row R1+1 to R1+R2: -Generators_other
+        """
+        # Ensure the other object is also a Zonotope
+        if not isinstance(other, Zonotope):
+            return NotImplemented
+        
+        # 1. Subtract the centers (the first row of zonotope_w)
+        # self.zonotope_w[0] is c1
+        # other.zonotope_w[0] is c2
+        center_diff = self.zonotope_w[0] - other.zonotope_w[0]
+        
+        # 2. Negate the generators (error terms) of the second zonotope
+        # self.zonotope_w[1:] are g1,i
+        # -other.zonotope_w[1:] are -g2,j
+        # We assume self.zonotope_w and other.zonotope_w are both (1 + R, ...)
+        
+        # If one zonotope has no generators (R=0), the slicing is safe.
+        negated_other_generators = -other.zonotope_w[1:]
+        
+        # 3. Concatenate the difference center, Z_self generators, and negated Z_other generators
+        new_zonotope_w = torch.cat([
+            center_diff.unsqueeze(0),       # [1, ...]
+            self.zonotope_w[1:],            # [R1, ...]
+            negated_other_generators        # [R2, ...]
+        ], dim=0)
+
+        # 4. Create a new Zonotope instance using the combined weights.
+        # Use the existing helper function to ensure all other metadata is copied correctly.
+        new_zonotope = make_zonotope_new_weights_same_args(
+            new_zonotope_w, 
+            source_zonotope=self, 
+            clone=False
+        )
+        
+        # Since we combined all generators, update the number of error terms.
+        new_zonotope.num_error_terms = self.num_error_terms + other.num_error_terms
+
+        # NOTE: You should also combine or propagate error_term_range_low/high if they are used
+        # in your system, but for standard zonotope propagation, this weight combination is sufficient.
+        
+        return new_zonotope
+
     def set_error_term_ranges(self, error_term_low: torch.Tensor, error_term_high: torch.Tensor) -> None:
         num_error_terms_whose_range_can_be_set = self.num_error_terms - self.num_input_error_terms_special_norm
 
