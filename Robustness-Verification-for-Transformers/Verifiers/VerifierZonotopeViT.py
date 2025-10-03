@@ -334,11 +334,16 @@ class VerifierZonotopeViT(Verifier):
         feed_forward = get_inner(ff)
 
         intermediate = attention_layer_normed.dense(feed_forward.net[0])  # FeedForward - Linear 1
+        self._check_num_error_terms(intermediate, "MLP Intermediate (Pre-ReLU)", layer_num)
         intermediate = intermediate.relu()  # FeedForward - ReLU
+        self._check_num_error_terms(intermediate, "\033[91mMLP Intermediate (Post-ReLU)\033[0m", layer_num)
         dense = intermediate.dense(feed_forward.net[3])  # FeedForward - Linear 2
+        
 
         attention = attention.expand_error_terms_to_match_zonotope(intermediate)
         dense = dense.add(attention)  # Residual 2
+        self._check_num_error_terms(dense, "After Residual 2", layer_num)
+
 
         if not self.args.keep_intermediate_zonotopes:
             del intermediate
