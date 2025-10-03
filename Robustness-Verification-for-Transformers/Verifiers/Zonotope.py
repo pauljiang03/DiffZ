@@ -1485,7 +1485,23 @@ class Zonotope:
             # inplace
             transformed_x[indices, has_new_error_term] = NEW_COEFFS[different_bool]
 
-            return make_zonotope_new_weights_same_args(transformed_x, source_zonotope=self, clone=False)
+
+            #DEBUG HERE ONWARDS
+            new_zonotope = make_zonotope_new_weights_same_args(transformed_x, source_zonotope=self, clone=False)
+    
+            l_exp, u_exp = new_zonotope.concretize()
+    
+            print("\n--- 🔎 DEBUG: exp_minimal_area FINAL OUTPUT BOUNDS ---")
+            print(f"  Exp Output L_min: {l_exp.min().item():.6e}")
+            print(f"  Exp Output U_max: {u_exp.max().item():.6e}")
+    
+            print(f"  Input L_min (before exp): {l.min().item():.6e}")
+            print(f"  Input U_max (before exp): {u.max().item():.6e}")
+            print("--------------------------------------------------")
+
+            return new_zonotope
+            #debug end
+            #return make_zonotope_new_weights_same_args(transformed_x, source_zonotope=self, clone=False)
 
     def exp_simple(self) -> "Zonotope":
         # lower bound: y >= f(l) + λ * (x - l)
@@ -1915,12 +1931,6 @@ class Zonotope:
         shape = list(self.zonotope_w.shape)
         shape[0] += n_new_error_terms
         transformed_x = torch.zeros(shape, device=self.args.device)
-
-        #REMOVE LATER UNSOUND
-        MAX_RECIPROCAL_ARG = 1e8 # Clamp to 100 million as a test, adjust as needed
-
-        u = torch.clamp(u, max=MAX_RECIPROCAL_ARG)
-        #REMOVE LATER UNSOUND
 
         if original_implementation:
             # upper bound: y <= f(l) + λ * (x - l)
