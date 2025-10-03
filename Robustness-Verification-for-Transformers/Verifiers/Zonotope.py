@@ -1892,6 +1892,12 @@ class Zonotope:
 
         l, u = self.concretize()
 
+        l_min = l.min().item()
+        u_max = u.max().item()
+
+        print(f"  Input Lower Bound Min (l_min): {l_min:.12f}")
+        print(f"  Input Upper Bound Max (u_max): {u_max:.12f}")
+
         if torch.min(l) <= epsilon:
             num_negative_elements = (l <= epsilon).float().sum().item()
             num_elements = l.nelement()
