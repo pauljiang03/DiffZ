@@ -27,6 +27,8 @@ parser.add_argument('--tokens_to_keep', type=int, default=9,
 args, _ = parser.parse_known_args(argv)
 args = update_arguments(args)
 args.error_reduction_method = 'box'
+args.max-num-error-terms = 14000
+
 args.with_lirpa_transformer = False
 args.all_words = True
 args.concretize_special_norm_error_together = True
