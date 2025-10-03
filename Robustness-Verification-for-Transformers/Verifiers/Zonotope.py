@@ -1492,11 +1492,11 @@ class Zonotope:
             l_exp, u_exp = new_zonotope.concretize()
     
             print("\n--- 🔎 DEBUG: exp_minimal_area FINAL OUTPUT BOUNDS ---")
-            print(f"  Exp Output L_min: {l_exp.min().item():.6e}")
-            print(f"  Exp Output U_max: {u_exp.max().item():.6e}")
+            print(f"  Exp Output L_min: {l_exp.min().item():.6e}", flush=True)
+            print(f"  Exp Output U_max: {u_exp.max().item():.6e}", flush=True)
     
-            print(f"  Input L_min (before exp): {l.min().item():.6e}")
-            print(f"  Input U_max (before exp): {u.max().item():.6e}")
+            print(f"  Input L_min (before exp): {l.min().item():.6e}", flush=True)
+            print(f"  Input U_max (before exp): {u.max().item():.6e}", flush=True)
             print("--------------------------------------------------")
 
             return new_zonotope
