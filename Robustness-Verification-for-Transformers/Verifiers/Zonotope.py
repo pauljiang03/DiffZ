@@ -1645,6 +1645,14 @@ class Zonotope:
 
             zonotope_sum_exp_diffs = make_zonotope_new_weights_same_args(final_sum_exps_zonotope_w, source_zonotope=self, clone=False)
             # return zonotope_sum_exp_diffs
+            #DEBUG
+            l_sum, u_sum = zonotope_sum_exp_diffs.concretize()
+
+            print("\n---  DEBUG: Sum(Exp) Bounds BEFORE Reciprocal ---", flush=True)
+            print(f"  Sum(Exp) L_min: {l_sum.min().item():.6e}", flush=True)
+            print(f"  Sum(Exp) U_max: {u_sum.max().item():.6e}", flush=True)
+            print("--------------------------------------------------", flush=True)
+            #DEBUG
 
             ### Step 4: Compute the inverse for all of these sums, thus obtaining all the softmax values
             zonotope_softmax = zonotope_sum_exp_diffs.reciprocal(original_implementation=not use_new_reciprocal, y_positive_constraint=add_value_positivity_constraint)
