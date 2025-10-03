@@ -13,6 +13,21 @@ from Verifiers.Verifier import Verifier
 from Verifiers.Zonotope import Zonotope, make_zonotope_new_weights_same_args, cleanup_memory
 from vit import ViT
 
+def _check_num_error_terms(self, zonotope, name: str, layer_num: int):
+    if hasattr(zonotope, 'error_terms') and zonotope.error_terms is not None:
+        num_error_terms = zonotope.error_terms.size(0)
+            
+    pruning_limit = getattr(self, 'pruning_n', -1) 
+            
+    if pruning_limit > 0 and num_error_terms > pruning_limit:
+        print(f"[DiffVer Layer {layer_num}] WARNING: {name} has {num_error_terms} error terms, exceeding the pruning limit of {pruning_limit}.")
+            
+    print(f"[DiffVer Layer {layer_num}] DEBUG: {name} completed with {num_error_terms} error terms (Zonotope center size: {zonotope.center.shape}).")
+
+    elif hasattr(zonotope, 'center'):
+         print(f"[DiffVer Layer {layer_num}] DEBUG: {name} is not a full Zonotope object or is missing error terms.")
+        
+
 
 def get_layernorm(x):
     return x.fn
