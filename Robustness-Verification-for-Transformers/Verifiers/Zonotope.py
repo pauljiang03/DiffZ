@@ -2002,7 +2002,7 @@ class Zonotope:
             u_s = u.flatten()[problem_idx_flat].item()
             width_s = width.flatten()[problem_idx_flat].item()
         
-            print("\n--- 💥 DEBUG: Reciprocal NaN/Inf Source Found ---", flush=True)
+            print("\n--- DEBUG: Reciprocal NaN/Inf Source Found ---", flush=True)
             print(f"  CRASH INDEX: {problem_idx_flat}", flush=True)
             print(f"  Input Interval: [l={l_s:.6e}, u={u_s:.6e}]", flush=True)
             print(f"  Width (u - l): {width_s:.6e}", flush=True)
