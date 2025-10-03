@@ -22,12 +22,15 @@ parser.add_argument('--tokens_to_keep', type=int, default=9,
 
 #parser.add_argument('--eps', type=float, default=0.01,
 #                    help='Fixed epsilon for the L-p norm input perturbation for differential verification.')
+parser.add_argument('--force_precise_dot_product', action='store_true', default=False,
+                    help='Force the verifier to use dot_product_precise for stability.')
 
 
 args, _ = parser.parse_known_args(argv)
 args = update_arguments(args)
 args.error_reduction_method = 'box'
-args.max_num_error_terms = 14000
+args.max_num_error_terms = 30000
+args.force_precise_dot_product = True 
 
 args.with_lirpa_transformer = False
 args.all_words = True
