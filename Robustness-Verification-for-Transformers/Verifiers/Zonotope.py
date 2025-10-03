@@ -1448,6 +1448,55 @@ class Zonotope:
         if not ((NEW_CONSTS - INTERCEPT)[different_bool] >= -1e-4).all():
             a = 5
 
+
+
+        diff_val = NEW_CONSTS - INTERCEPT
+    
+    
+        if different_bool.any() and (self.args.debug or self.args.verbose):
+        
+            diff_val_active = diff_val[different_bool]
+            min_diff, min_diff_local_idx = torch.min(diff_val_active, 0)
+        
+            problem_indices_flat = torch.where(different_bool.flatten())[0]
+            problem_flat_idx = problem_indices_flat[min_diff_local_idx]
+            problem_multi_idx = np.unravel_index(problem_flat_idx.cpu().numpy(), l.shape)
+        
+            l_s = l.flatten()[problem_flat_idx].item()
+            u_s = u.flatten()[problem_flat_idx].item()
+            exp_l_s = exp_l.flatten()[problem_flat_idx].item()
+            exp_u_s = exp_u.flatten()[problem_flat_idx].item()
+            t_crit_arg_s = t_crit_arg.flatten()[problem_flat_idx].item()
+            t_crit_s = t_crit.flatten()[problem_flat_idx].item()
+            t_opt_s = t_opt.flatten()[problem_flat_idx].item()
+            lambdas_s = lambdas.flatten()[problem_flat_idx].item()
+            NEW_CONSTS_s = NEW_CONSTS.flatten()[problem_flat_idx].item()
+            INTERCEPT_s = INTERCEPT.flatten()[problem_flat_idx].item()
+        
+            print("\n--- DEBUG: exp_minimal_area FAILURE ANALYSIS ---")
+            print(f"  Failure Index (Multi-dim): {problem_multi_idx}")
+            print(f"  Min diff (NEW_CONSTS - INTERCEPT): {min_diff.item():.8e}")
+            print("--------------------------------------------------")
+            print(f"  Input Bounds [l, u]: [{l_s:.6e}, {u_s:.6e}]")
+            print(f"  Exp Bounds [exp(l), exp(u)]: [{exp_l_s:.6e}, {exp_u_s:.6e}]")
+            print(f"  Secant Slope (t_crit_arg): {t_crit_arg_s:.6e}")
+            print(f"  t_crit (Optimal Tangency Point): {t_crit_s:.6e}")
+            print(f"  t_opt (Chosen Tangency Point): {t_opt_s:.6e}")
+            print(f"  Lambda (Slope e^t_opt): {lambdas_s:.6e}")
+            print("--------------------------------------------------")
+            print(f"  INTERCEPT: (e^t_opt - lambda*t_opt): {INTERCEPT_s:.6e}")
+            print(f"  NEW_CONSTS: 0.5 * (f(t) - lambda*t + f(u) - lambda*u): {NEW_CONSTS_s:.6e}")
+            print(f"  NEW_CONSTS - INTERCEPT (DIFF): {NEW_CONSTS_s - INTERCEPT_s:.8e}")
+        
+            if (NEW_CONSTS_s - INTERCEPT_s) < -1e-4:
+                print("\n!!! EXPLANATION FOR FAILURE (Sample 9) !!!")
+                print("!!! The term NEW_CONSTS - INTERCEPT is the 'RADIUS' term (T-B)/2 in the non-minimal-area approach.")
+                print("!!! Its negative value (e.g., -0.015625) means the affine approximation is NO LONGER CONSERVATIVE.")
+                print("!!! The input interval [l, u] is so wide that the tangent line at t_opt and the secant line from u")
+                print("!!! result in an inverted bounding box, where the lower bound is higher than the upper bound.")
+                print(f"!!! This happens because U/L ratio is massive: {u_s / l_s:.2e} (for Sample 9's problematic element).")
+            print("--- END DEBUG: exp_minimal_area FAILURE ANALYSIS ---\n")
+
         assert ((NEW_CONSTS - INTERCEPT)[different_bool] >= -1e-4).all(), \
             f"exp_mark: diff < 0. diff min = {(NEW_CONSTS - INTERCEPT)[different_bool].min()}, " \
             f"const min = {NEW_CONSTS[different_bool].min()},  intercept.max = {INTERCEPT.max()}"
