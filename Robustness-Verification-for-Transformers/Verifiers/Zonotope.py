@@ -1453,8 +1453,7 @@ class Zonotope:
         diff_val = NEW_CONSTS - INTERCEPT
     
     
-        if different_bool.any() and (self.args.debug or self.args.verbose):
-        
+        if (diff_val_active < -1e-4).any():        
             diff_val_active = diff_val[different_bool]
             min_diff, min_diff_local_idx = torch.min(diff_val_active, 0)
         
