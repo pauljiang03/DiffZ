@@ -1992,9 +1992,30 @@ class Zonotope:
 
         l, u = self.concretize()
 
+        l_min_val = torch.min(l).item()
+        u_max_val = torch.max(u).item()
+    
+        print("\n--- Reciprocal Input Bounds Check ---")
+        print(f"  Input Lower Bound Min (l_min): {l_min_val:.12f}")
+        print(f"  Input Upper Bound Max (u_max): {u_max_val:.12f}")
+
         if torch.min(l) <= epsilon:
             num_negative_elements = (l <= epsilon).float().sum().item()
             num_elements = l.nelement()
+
+            print(f"\n!!! FAILURE DETECTED: Reciprocal Bounding Condition Violated !!!")
+            print(f"!!! CAUSE: Minimum lower bound (l_min) is non-positive or near zero.")
+            print(f"!!! VIOLATION: The linear relaxation for 1/x is only valid for x > 0.")
+
+            problem_flat_idx = torch.argmin(l).item()
+            problem_multi_idx = np.unravel_index(problem_flat_idx, l.shape)
+        
+            l_problem = l.flatten()[problem_flat_idx].item()
+            u_problem = u.flatten()[problem_flat_idx].item()
+        
+            print(f"  - Problematic Index (Multidim): {problem_multi_idx}")
+            print(f"  - Problematic Bounds: L={l_problem:.12f}, U={u_problem:.12f}")
+        
 
             message = "reciprocal: Bounds must be positive but %d elements out of %d were < 1e-12 (min value = %.12f, iszero = %s)" % (
                 num_negative_elements, num_elements, torch.min(l).item(), torch.min(l).item() == 0)
