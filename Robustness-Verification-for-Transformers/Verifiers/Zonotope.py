@@ -1987,6 +1987,8 @@ class Zonotope:
             X = l.reciprocal() - lambdas * l    # here we have that t_opt >= t_crit, and therefore we have to use L since we connect to that endpoint
             NEW_CONSTS = 0.5 * (t_opt.reciprocal() - lambdas * t_opt + X)
             NEW_COEFFS = 0.5 * (lambdas * t_opt - t_opt.reciprocal() + X)
+        
+        nan_mask = torch.isnan(NEW_COEFFS) | torch.isinf(NEW_COEFFS)
 
         if nan_mask.any():
             problem_idx_flat = torch.where(nan_mask.flatten())[0][0].item()
