@@ -166,19 +166,14 @@ class Zonotope:
                 self.word_embedding_size = zonotope_w.shape[3]
         else:
             self.num_words, self.word_embedding_size = value.shape
-            num_input_features = self.num_words * self.word_embedding_size
-
 
             start = 1 if start_perturbation is None else start_perturbation
             end = self.num_words - 1 if end_perturbation is None else end_perturbation
 
-            '''if self.args.all_words:
+            if self.args.all_words:
                 self.num_error_terms = self.word_embedding_size * (end - start)
             else:
-                self.num_error_terms = self.word_embedding_size'''
-            
-            self.num_error_terms = num_input_features
-
+                self.num_error_terms = self.word_embedding_size
 
             self.zonotope_w = torch.zeros([
                 1 + self.num_error_terms,  # Bias + error terms for the perturbed word
@@ -198,17 +193,7 @@ class Zonotope:
 
             # in general, the only indices that should have weight=eps are [i + 1, perturbed_word, i]
             # which means that the i-th coordinate of the embedding of the perturbed word should depend on the i-th error term
-
-            if self.eps > 1e-12:
-                if self.num_error_terms == self.num_words * self.word_embedding_size:
-                    for flat_idx in range(self.num_error_terms):
-                        error_idx = flat_idx + 1 
-                        word_idx = flat_idx // self.word_embedding_size
-                        embed_idx = flat_idx % self.word_embedding_size
-
-                        if error_idx < self.zonotope_w.shape[0] and word_idx < self.zonotope_w.shape[1] and embed_idx < self.zonotope_w.shape[2]:
-                           self.zonotope_w[error_idx, word_idx, embed_idx] = self.eps
-            '''if self.args.all_words:
+            if self.args.all_words:
                 error_index = 1
 
                 for w in range(start, end):
@@ -217,10 +202,9 @@ class Zonotope:
                         error_index += 1
             else:
                 for i in range(1, 1 + self.num_error_terms):
-                    self.zonotope_w[i, perturbed_word_index, i - 1] = self.eps'''
+                    self.zonotope_w[i, perturbed_word_index, i - 1] = self.eps
 
         self.num_input_error_terms: int = args.num_input_error_terms
-        #self.num_input_error_terms: int = self.num_error_terms 
         self.num_input_error_terms_special_norm = self.num_input_error_terms if (self.p == 1 or self.p == 2) else 0
 
     def to_device(self, val: torch.Tensor):
@@ -338,8 +322,8 @@ class Zonotope:
         N_others_reduced   = self.num_error_terms - n_input_to_keep - N_others_unreduced
 
         if N_others_reduced > 0 and N_others_unreduced < 0:
-            #print(colored(f'Warning: max num error terms {max_num_error_terms} too low to do a reduction', 'red'))
-            #print(colored(f'Warning: reducing instead to min num {self.num_words*self.word_embedding_size + 1} noise symbols', 'red'))
+            print(colored(f'Warning: max num error terms {max_num_error_terms} too low to do a reduction', 'red'))
+            print(colored(f'Warning: reducing instead to min num {self.num_words*self.word_embedding_size + 1} noise symbols', 'red'))
             return self.reduce_num_error_terms_box(max_num_error_terms=self.num_words*self.word_embedding_size + n_input_to_keep + 1)
 
         if N_others_reduced > 0 and N_others_unreduced >= 0:
@@ -581,57 +565,6 @@ class Zonotope:
 
         return make_zonotope_new_weights_same_args(new_zonotope_w, source_zonotope=self)
 
-    def first_k_prune(self, k: int) -> "Zonotope":
-        prefix_token_count = 1
-        if self.zonotope_w.ndim == 3:
-            seq_dim = 1
-        else:
-            seq_dim = 2
-
-        current_seq_len = self.zonotope_w.shape[seq_dim]
-        max_seq_tokens = current_seq_len - prefix_token_count
-        if k < 0: k = 0
-        k = min(k, max_seq_tokens)
-        num_tokens_to_keep = prefix_token_count + k
-
-        if num_tokens_to_keep >= current_seq_len:
-            return self
-
-        slices = [slice(None)] * self.zonotope_w.ndim
-        slices[seq_dim] = slice(0, num_tokens_to_keep)
-        new_weights = self.zonotope_w[tuple(slices)].clone()
-
-        new_z = make_zonotope_new_weights_same_args(new_weights, source_zonotope=self, clone=False)
-        new_z.num_words = new_weights.shape[seq_dim]
-
-        return new_z
-
-
-    def subtract(self, other: "Zonotope") -> "Zonotope":
-
-        num_errors_self = self.get_num_error_terms()
-        num_errors_other = other.get_num_error_terms()
-
-        if num_errors_self > num_errors_other:
-            self_exp = self
-            other_exp = other.expand_error_terms_to_match_zonotope(self)
-        elif num_errors_other > num_errors_self:
-            self_exp = self.expand_error_terms_to_match_zonotope(other)
-            other_exp = other
-        else:
-            self_exp = self
-            other_exp = other
-
-        shape_dim_index = 0 if self_exp.zonotope_w.ndim <= 3 else 1
-
-        new_weights = self_exp.zonotope_w - other_exp.zonotope_w
-
-        source_for_params = self if num_errors_self >= num_errors_other else other
-        new_z = make_zonotope_new_weights_same_args(new_weights, source_zonotope=source_for_params, clone=False)
-        new_z.error_term_range_low = None
-        new_z.error_term_range_high = None
-        return new_z
-
     def add(self, delta: Union["Zonotope", float, torch.Tensor]) -> "Zonotope":
         if type(delta) == Zonotope:
             return make_zonotope_new_weights_same_args(new_weights=self.zonotope_w + delta.zonotope_w, source_zonotope=self, clone=False)
@@ -682,10 +615,10 @@ class Zonotope:
         if not zonotopes_can_have_different_number_noise_symbols:
             if self.num_error_terms < other.num_error_terms:
                 self = self.expand_error_terms_to_match_zonotope(other)
-                #print("Dot product: Increasing number of error terms in self")
+                print("Dot product: Increasing number of error terms in self")
             elif other.num_error_terms < self.num_error_terms:
                 other = other.expand_error_terms_to_match_zonotope(self)
-                #print("Dot product: Increasing number of error terms in other")
+                print("Dot product: Increasing number of error terms in other")
 
         assert self.zonotope_w.ndim == 4, "self should have 4 dims"
         assert other.zonotope_w.ndim == 4, "other should have 4 dims"
@@ -1356,14 +1289,6 @@ class Zonotope:
             return self.remove_attention_heads_dim(clone=False).exp_minimal_area(return_raw_tensors_separately, allow_modifying_input_zonotope).add_attention_heads_dim(A, clone=False)
 
         l, u = self.concretize()
-        MAX_EXP_ARG = 10.0 # Adjust this value based on float precision (e.g., 70 for float32 might be safer than 700)
-        #print(f"DEBUG exp_minimal_area: Original l min/max: {l.min().item():.2e}/{l.max().item():.2e}, u min/max: {u.min().item():.2e}/{u.max().item():.2e}")
-
-        l = torch.clamp(l, min=-MAX_EXP_ARG, max=MAX_EXP_ARG)
-        u = torch.clamp(u, min=-MAX_EXP_ARG, max=MAX_EXP_ARG)
-        u = torch.max(u, l) 
-
-        #print(f"DEBUG exp_minimal_area: Clamped l min/max: {l.min().item():.2e}/{l.max().item():.2e}, u min/max: {u.min().item():.2e}/{u.max().item():.2e}")
 
         # terms that have new error weights
         different_bool = has_new_error_term = (l != u)
@@ -1373,20 +1298,8 @@ class Zonotope:
         shape = list(self.zonotope_w.shape)
         if not return_raw_tensors_separately:
             shape[0] += n_new_error_terms
-        
-        exp_l = l.exp()
-        exp_u = u.exp()
 
-        t_crit_arg = (exp_u - exp_l) / (u - l + 1e-20)
-
-        inf_slope_mask = torch.isinf(exp_u) & ~torch.isinf(exp_l)
-        t_crit_arg[inf_slope_mask] = float('inf')
-
-        t_crit = torch.log(t_crit_arg + 1e-20) # Epsilon for log of near zero
-        t_crit[torch.isnan(t_crit) | torch.isneginf(t_crit)] = (0.5 * l + 0.5 * u)[torch.isnan(t_crit) | torch.isneginf(t_crit)]
-        t_crit[torch.isposinf(t_crit)] = u[torch.isposinf(t_crit)] # If t_crit is inf, use u for t_opt choice later.
-
-        #t_crit = ((u.exp() - l.exp()) / (u - l)).log()
+        t_crit = ((u.exp() - l.exp()) / (u - l)).log()
         t_crit[u == l] = float('inf')  # Replace NaNs by infinity
         t_crit[t_crit == float('-inf')] = (0.5 * l + 0.5 * u)[t_crit == float('-inf')]  # Replace -Inf that arise from the log to avg(l, u)
         # t_crit[t_crit == float('-inf')] = float('+inf')  # Replace -Inf that arise from the log to avg(l, u)
@@ -1395,7 +1308,6 @@ class Zonotope:
 
         if (t_opt == float('-inf')).any():
             t_opt = torch.min(torch.min(t_crit, t_crit2), u)  # Idea: has to be below L + 1 (and <= U)
-
 
         # λ = f'(t) = e^t
         lambdas = t_opt.exp()
@@ -1447,54 +1359,6 @@ class Zonotope:
         INTERCEPT = (t_opt.exp() - lambdas * t_opt)
         if not ((NEW_CONSTS - INTERCEPT)[different_bool] >= -1e-4).all():
             a = 5
-
-
-
-        diff_val = NEW_CONSTS - INTERCEPT
-    
-    
-        if (diff_val_active < -1e-4).any():        
-            diff_val_active = diff_val[different_bool]
-            min_diff, min_diff_local_idx = torch.min(diff_val_active, 0)
-        
-            problem_indices_flat = torch.where(different_bool.flatten())[0]
-            problem_flat_idx = problem_indices_flat[min_diff_local_idx]
-            problem_multi_idx = np.unravel_index(problem_flat_idx.cpu().numpy(), l.shape)
-        
-            l_s = l.flatten()[problem_flat_idx].item()
-            u_s = u.flatten()[problem_flat_idx].item()
-            exp_l_s = exp_l.flatten()[problem_flat_idx].item()
-            exp_u_s = exp_u.flatten()[problem_flat_idx].item()
-            t_crit_arg_s = t_crit_arg.flatten()[problem_flat_idx].item()
-            t_crit_s = t_crit.flatten()[problem_flat_idx].item()
-            t_opt_s = t_opt.flatten()[problem_flat_idx].item()
-            lambdas_s = lambdas.flatten()[problem_flat_idx].item()
-            NEW_CONSTS_s = NEW_CONSTS.flatten()[problem_flat_idx].item()
-            INTERCEPT_s = INTERCEPT.flatten()[problem_flat_idx].item()
-        
-            print("\n--- DEBUG: exp_minimal_area FAILURE ANALYSIS ---")
-            print(f"  Failure Index (Multi-dim): {problem_multi_idx}")
-            print(f"  Min diff (NEW_CONSTS - INTERCEPT): {min_diff.item():.8e}")
-            print("--------------------------------------------------")
-            print(f"  Input Bounds [l, u]: [{l_s:.6e}, {u_s:.6e}]")
-            print(f"  Exp Bounds [exp(l), exp(u)]: [{exp_l_s:.6e}, {exp_u_s:.6e}]")
-            print(f"  Secant Slope (t_crit_arg): {t_crit_arg_s:.6e}")
-            print(f"  t_crit (Optimal Tangency Point): {t_crit_s:.6e}")
-            print(f"  t_opt (Chosen Tangency Point): {t_opt_s:.6e}")
-            print(f"  Lambda (Slope e^t_opt): {lambdas_s:.6e}")
-            print("--------------------------------------------------")
-            print(f"  INTERCEPT: (e^t_opt - lambda*t_opt): {INTERCEPT_s:.6e}")
-            print(f"  NEW_CONSTS: 0.5 * (f(t) - lambda*t + f(u) - lambda*u): {NEW_CONSTS_s:.6e}")
-            print(f"  NEW_CONSTS - INTERCEPT (DIFF): {NEW_CONSTS_s - INTERCEPT_s:.8e}")
-        
-            if (NEW_CONSTS_s - INTERCEPT_s) < -1e-4:
-                print("\n!!! EXPLANATION FOR FAILURE (Sample 9) !!!")
-                print("!!! The term NEW_CONSTS - INTERCEPT is the 'RADIUS' term (T-B)/2 in the non-minimal-area approach.")
-                print("!!! Its negative value (e.g., -0.015625) means the affine approximation is NO LONGER CONSERVATIVE.")
-                print("!!! The input interval [l, u] is so wide that the tangent line at t_opt and the secant line from u")
-                print("!!! result in an inverted bounding box, where the lower bound is higher than the upper bound.")
-                print(f"!!! This happens because U/L ratio is massive: {u_s / l_s:.2e} (for Sample 9's problematic element).")
-            print("--- END DEBUG: exp_minimal_area FAILURE ANALYSIS ---\n")
 
         assert ((NEW_CONSTS - INTERCEPT)[different_bool] >= -1e-4).all(), \
             f"exp_mark: diff < 0. diff min = {(NEW_CONSTS - INTERCEPT)[different_bool].min()}, " \
@@ -1714,15 +1578,6 @@ class Zonotope:
             # return zonotope_sum_exp_diffs
 
             ### Step 4: Compute the inverse for all of these sums, thus obtaining all the softmax values
-            #print("\n--- Debug: zonotope_sum_exp_diffs (input to reciprocal in softmax) ---")
-            l_sed, u_sed = zonotope_sum_exp_diffs.concretize()
-            if l_sed is not None:
-                #print(f"sum_exp_diffs Lower - Min: {l_sed.min().item():.4e}, Max: {l_sed.max().item():.4e}, Mean: {l_sed.mean().item():.4e}, NaN: {torch.isnan(l_sed).sum().item()}, Inf: {torch.isinf(l_sed).sum().item()}")
-                problematic_l_indices = torch.where(l_sed <= 1e-9) # Check for very small or non-positive
-                #if problematic_l_indices[0].numel() > 0:
-                   # print(f"Found {problematic_l_indices[0].numel()} l_sed values <= 1e-9.")
-            #if u_sed is not None:
-                #print(f"sum_exp_diffs Upper - Min: {u_sed.min().item():.4e}, Max: {u_sed.max().item():.4e}, Mean: {u_sed.mean().item():.4e}, NaN: {torch.isnan(u_sed).sum().item()}, Inf: {torch.isinf(u_sed).sum().item()}")
             zonotope_softmax = zonotope_sum_exp_diffs.reciprocal(original_implementation=not use_new_reciprocal, y_positive_constraint=add_value_positivity_constraint)
         else:
             # zonotope_with_adjusted_center = self.subtract_max_from_bias()
@@ -1732,7 +1587,7 @@ class Zonotope:
 
             l, u = zonotope_exp.concretize()
             if torch.isnan(l).any():
-                #print("Bound have NaN values: Lower - %s values   Upper - %s values" % (torch.isnan(l).sum().item(), torch.isnan(u).sum().item()))
+                print("Bound have NaN values: Lower - %s values   Upper - %s values" % (torch.isnan(l).sum().item(), torch.isnan(u).sum().item()))
                 l, u = zonotope_exp.concretize()
             assert (l > -1e-9).all(), "Softmax: Exp is negative or 0 (min l = %.9f)" % l.min()
 
@@ -1971,62 +1826,6 @@ class Zonotope:
 
         return make_zonotope_new_weights_same_args(transformed_x, source_zonotope=self, clone=False)
 
-    ### SUBTRACT NEW####
-    
-    def __sub__(self, other):
-        """
-        [Differential Verification] Overloads the subtraction operator (-)
-        to calculate the differential zonotope Z_self - Z_other.
-        
-        The resulting zonotope Z_Delta = Z_self - Z_other soundly bounds 
-        the difference in scores for all possible adversarial inputs.
-        
-        Z_Delta.zonotope_w:
-            Row 0: Center_self - Center_other
-            Row 1 to R1: Generators_self
-            Row R1+1 to R1+R2: -Generators_other
-        """
-        # Ensure the other object is also a Zonotope
-        if not isinstance(other, Zonotope):
-            return NotImplemented
-        
-        # 1. Subtract the centers (the first row of zonotope_w)
-        # self.zonotope_w[0] is c1
-        # other.zonotope_w[0] is c2
-        center_diff = self.zonotope_w[0] - other.zonotope_w[0]
-        
-        # 2. Negate the generators (error terms) of the second zonotope
-        # self.zonotope_w[1:] are g1,i
-        # -other.zonotope_w[1:] are -g2,j
-        # We assume self.zonotope_w and other.zonotope_w are both (1 + R, ...)
-        
-        # If one zonotope has no generators (R=0), the slicing is safe.
-        negated_other_generators = -other.zonotope_w[1:]
-        
-        # 3. Concatenate the difference center, Z_self generators, and negated Z_other generators
-        new_zonotope_w = torch.cat([
-            center_diff.unsqueeze(0),       # [1, ...]
-            self.zonotope_w[1:],            # [R1, ...]
-            negated_other_generators        # [R2, ...]
-        ], dim=0)
-
-        # 4. Create a new Zonotope instance using the combined weights.
-        # Use the existing helper function to ensure all other metadata is copied correctly.
-        new_zonotope = make_zonotope_new_weights_same_args(
-            new_zonotope_w, 
-            source_zonotope=self, 
-            clone=False
-        )
-        
-        # Since we combined all generators, update the number of error terms.
-        new_zonotope.num_error_terms = self.num_error_terms + other.num_error_terms
-
-        # NOTE: You should also combine or propagate error_term_range_low/high if they are used
-        # in your system, but for standard zonotope propagation, this weight combination is sufficient.
-        
-        return new_zonotope
-
-
     def reciprocal(self, original_implementation=True, y_positive_constraint=False) -> "Zonotope":
         """
         Returns a new zonotope representing the reciprocal of the values in this zonotope.
@@ -2040,30 +1839,9 @@ class Zonotope:
 
         l, u = self.concretize()
 
-        l_min_val = torch.min(l).item()
-        u_max_val = torch.max(u).item()
-    
-        print("\n--- Reciprocal Input Bounds Check ---")
-        print(f"  Input Lower Bound Min (l_min): {l_min_val:.12f}")
-        print(f"  Input Upper Bound Max (u_max): {u_max_val:.12f}")
-
         if torch.min(l) <= epsilon:
             num_negative_elements = (l <= epsilon).float().sum().item()
             num_elements = l.nelement()
-
-            print(f"\n!!! FAILURE DETECTED: Reciprocal Bounding Condition Violated !!!")
-            print(f"!!! CAUSE: Minimum lower bound (l_min) is non-positive or near zero.")
-            print(f"!!! VIOLATION: The linear relaxation for 1/x is only valid for x > 0.")
-
-            problem_flat_idx = torch.argmin(l).item()
-            problem_multi_idx = np.unravel_index(problem_flat_idx, l.shape)
-        
-            l_problem = l.flatten()[problem_flat_idx].item()
-            u_problem = u.flatten()[problem_flat_idx].item()
-        
-            print(f"  - Problematic Index (Multidim): {problem_multi_idx}")
-            print(f"  - Problematic Bounds: L={l_problem:.12f}, U={u_problem:.12f}")
-        
 
             message = "reciprocal: Bounds must be positive but %d elements out of %d were < 1e-12 (min value = %.12f, iszero = %s)" % (
                 num_negative_elements, num_elements, torch.min(l).item(), torch.min(l).item() == 0)
@@ -2072,95 +1850,6 @@ class Zonotope:
         # terms that have new error weights
         different_bool = has_new_error_term = (l != u)
         equal_bool = (l == u)
-
-
-
-        if different_bool.any() and (self.args.debug or self.args.verbose):
-            with torch.no_grad():
-                def print_stats(tensor, name, indent="    "):
-                    if tensor is None:
-                        print(f"{indent}{name}: None")
-                        return
-                    tensor = tensor.detach()
-                    if tensor.numel() == 1:
-                        # For single values, just print the value.
-                        print(f"{indent}{name}: {tensor.item():.6e}")
-                    else:
-                        # For tensors, print stats.
-                        print(f"{indent}{name} - Shape: {tensor.shape}, Min: {tensor.min().item():.4e}, Max: {tensor.max().item():.4e}, Mean: {tensor.mean().item():.4e}, NaNs: {torch.isnan(tensor).sum().item()}, Infs: {torch.isinf(tensor).sum().item()}")
-
-                print("\n--- DEBUG: Reciprocal Internals ---")
-                
-                # Find the first problematic index for detailed analysis.
-                # We will analyze the element with the minimum 'l' value among those
-                # where l != u, as near-zero 'l' values are often the cause of instability.
-                problem_indices_flat = torch.where(different_bool.flatten())[0]
-                if problem_indices_flat.numel() > 0:
-                    l_different_flat = l.flatten()[problem_indices_flat]
-                    min_l_val, min_l_local_idx = torch.min(l_different_flat, 0)
-                    # Get the global flat index of the most problematic element
-                    problem_flat_idx = problem_indices_flat[min_l_local_idx]
-                    
-                    # Convert flat index back to multi-dimensional index for printing
-                    problem_multi_idx = np.unravel_index(problem_flat_idx.cpu().numpy(), l.shape)
-                    print(f"  Analyzing element with min 'l' at index: {problem_multi_idx} (flat index: {problem_flat_idx})")
-
-                    # 1. Print input l and u for this specific element
-                    l_sample = l.flatten()[problem_flat_idx]
-                    u_sample = u.flatten()[problem_flat_idx]
-                    print_stats(l_sample, "l (at sample index)")
-                    print_stats(u_sample, "u (at sample index)")
-
-                    # Re-calculate intermediate values for this single element
-                    # Add a small epsilon for stability in divisions to prevent debug prints from crashing
-                    epsilon_div = 1e-20
-
-                    # 2. mean_slope
-                    mean_slope_sample = (u_sample.reciprocal() - l_sample.reciprocal()) / (u_sample - l_sample + epsilon_div)
-                    print_stats(mean_slope_sample, "mean_slope")
-
-                    # 3. Argument to sqrt for t_crit
-                    arg_sqrt_sample = -mean_slope_sample.reciprocal()
-                    print_stats(arg_sqrt_sample, "Argument to sqrt for t_crit")
-
-                    # 4. t_crit
-                    # Clamp the argument to be non-negative before sqrt to prevent NaNs
-                    t_crit_sample = (arg_sqrt_sample.clamp(min=0.0) + epsilon_div).sqrt()
-                    print_stats(t_crit_sample, "t_crit")
-
-                    # 5. t_crit2
-                    t_crit2_sample = u_sample / 2.0
-                    print_stats(t_crit2_sample, "t_crit2")
-                    
-                    # 6. t_opt (advisor's suggestion: "dump t_opt")
-                    t_opt_sample = t_crit_sample
-                    if y_positive_constraint:
-                        t_opt_sample = torch.max(t_crit_sample, t_crit2_sample + 0.01)
-                    print_stats(t_opt_sample, "t_opt")
-
-                    # 7. lambdas
-                    lambdas_sample = -(t_opt_sample + epsilon_div).reciprocal().square()
-                    print_stats(lambdas_sample, "lambdas")
-
-                    # 8. X
-                    X_sample = (l_sample + epsilon_div).reciprocal() - lambdas_sample * l_sample
-                    print_stats(X_sample, "X")
-
-                    # 9. Components of NEW_COEFFS
-                    print("    Components of NEW_COEFFS (before * 0.5):")
-                    term1 = lambdas_sample * t_opt_sample
-                    term2 = -(t_opt_sample + epsilon_div).reciprocal()
-                    term3 = X_sample
-                    new_coeffs_sum_sample = term1 + term2 + term3
-                    print_stats(term1, "  (lambdas * t_opt)")
-                    print_stats(term2, "  (-t_opt.reciprocal())")
-                    print_stats(term3, "  (X)")
-                    print_stats(new_coeffs_sum_sample, "Sum of components")
-                
-                print("--- END DEBUG: Reciprocal Internals ---\n")
-
-
-        
 
         n_new_error_terms = int(has_new_error_term.sum().item())
 
@@ -2785,20 +2474,6 @@ def process_values(input_zonotope_w: torch.Tensor, source_zonotope: "Zonotope", 
 
     ### Step 2: compute all the exp(xj - xi)
     # End shape: (1 + num_error_terms, A * num_rows, num_values * num_values)?
-    #print("\n--- DEBUG process_values: Input to exp_minimal_area ('zonotope_diffs') ---")
-    l_zd, u_zd = zonotope_diffs.concretize()
-    #if l_zd is not None:
-        #print(f"zonotope_diffs Lower - Min: {l_zd.min().item():.4e}, Max: {l_zd.max().item():.4e}, Mean: {l_zd.mean().item():.4e}, NaNs: {torch.isnan(l_zd).sum().item()}, Infs: {torch.isinf(l_zd).sum().item()}")
-    #if u_zd is not None: # Similar for u_zd
-        #print(f"zonotope_diffs Upper - Min: {u_zd.min().item():.4e}, Max: {u_zd.max().item():.4e}, Mean: {u_zd.mean().item():.4e}, NaNs: {torch.isnan(u_zd).sum().item()}, Infs: {torch.isinf(u_zd).sum().item()}")
-
-
-
-
-
-
-    
-    
     incomplete_diffs_exp_w, exp_new_error_term = zonotope_diffs.exp_minimal_area(return_raw_tensors_separately=True,
                                                                                  allow_modifying_input_zonotope=True)
     # full_exp_zonotope = zonotope_diffs.exp_mark(return_raw_tensors_separately=False)
