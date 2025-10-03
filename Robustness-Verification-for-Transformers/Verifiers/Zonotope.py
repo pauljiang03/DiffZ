@@ -1988,6 +1988,18 @@ class Zonotope:
             NEW_CONSTS = 0.5 * (t_opt.reciprocal() - lambdas * t_opt + X)
             NEW_COEFFS = 0.5 * (lambdas * t_opt - t_opt.reciprocal() + X)
 
+        if nan_mask.any():
+            problem_idx_flat = torch.where(nan_mask.flatten())[0][0].item()
+        
+            l_s = l.flatten()[problem_idx_flat].item()
+            u_s = u.flatten()[problem_idx_flat].item()
+            width_s = width.flatten()[problem_idx_flat].item()
+        
+            print("\n--- 💥 DEBUG: Reciprocal NaN/Inf Source Found ---", flush=True)
+            print(f"  CRASH INDEX: {problem_idx_flat}", flush=True)
+            print(f"  Input Interval: [l={l_s:.6e}, u={u_s:.6e}]", flush=True)
+            print(f"  Width (u - l): {width_s:.6e}", flush=True)
+            print("--------------------------------------------------", flush=True)
         # INTERCEPT = (t_opt.reciprocal() - lambdas * t_opt)
         # isNan = torch.isnan(NEW_COEFFS[different_bool])
         # if isNan.any().item():
