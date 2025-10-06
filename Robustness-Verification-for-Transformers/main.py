@@ -21,9 +21,6 @@ parser.add_argument('--prune_layer_idx', type=int, default=0,
 parser.add_argument('--tokens_to_keep', type=int, default=9,
                     help='Number of tokens to keep after pruning (e.g., 9 = [CLS] + 8 patches).')
 
-parser.add_argument('--eps', type=float, default=0.01,
-                    help='Fixed epsilon for the L-p norm input perturbation for differential verification.')
-
 
 args, _ = parser.parse_known_args(argv)
 args = update_arguments(args)
