@@ -14,214 +14,204 @@ from vit_attack import pgd_attack
 
 # --- Import the updated verifier ---
 # Ensure IntervalBoundVerifier.py is in the same directory
-from Verifiers.IntervalBoundVerifier import IntervalBoundDiffVerViT, sample_correct_samples 
+from Verifiers.IntervalBoundVerifier import IntervalBoundDiffVerViT, sample_correct_samples
 
 
 def analyze_results(results: List[Dict[str, Any]], args):
     """
-    Analyzes the collected differential bounds for the required metrics, 
-    including both general and conditional averages for overlapping classes.
-    """
-    total_lower_bound_real_class = 0.0
-    total_upper_bound_real_class = 0.0
-    max_upper_bound_real_class = -float('inf')
-    
-    num_differential_safety_failures = 0 
-    num_robustness_margin_failures = 0 # Denominator for the conditional average (Metric 5)
-    
-    # Metric 5 General: Accumulator for the total count of individual non-real classes that overlap the real class's lower bound (across ALL samples)
-    total_overlapping_classes_count_general = 0.0 
-    
-    # Metric 5 Conditional: Accumulator for the total count of overlapping classes (only in failure cases)
-    total_overlapping_classes_count_conditional = 0.0
-    
-    valid_samples = len(results)
+    Analyzes verification results to compare unpruned (P) and pruned (P') models.
 
-    if valid_samples == 0:
+    This function assumes the 'results' list contains dictionaries with the following structure
+    for each sample, which must be returned by your verifier:
+    {
+        'label': int,
+        'lower_bounds_unpruned': np.ndarray,
+        'upper_bounds_unpruned': np.ndarray,
+        'lower_bounds_pruned': np.ndarray,
+        'upper_bounds_pruned': np.ndarray,
+        'lower_bounds_diff': np.ndarray,  // Bounds on (P - P')
+        'upper_bounds_diff': np.ndarray,  // Bounds on (P - P')
+    }
+    """
+    if not results:
         print("No valid samples were processed to analyze.")
         return
 
-    for result in results:
-        label = result['label']
-        lower = result['lower_bounds']
-        upper = result['upper_bounds']
+    # --- Metric Accumulators ---
+    num_samples = len(results)
+    
+    # For Unpruned Model (P)
+    certified_correct_unpruned = 0
+    
+    # For Pruned Model (P')
+    certified_correct_pruned = 0
+    
+    # For Differential Analysis (P - P')
+    diff_safety_failures = 0
+    diff_margin_failures = 0
+    total_lower_bound_diff_real_class = 0.0
 
-        # 1. & 2. Metrics for the Real Class (Label)
-        L_real_diff = lower[label]
-        U_real_diff = upper[label]
-        
-        total_lower_bound_real_class += L_real_diff
-        total_upper_bound_real_class += U_real_diff
-        max_upper_bound_real_class = max(max_upper_bound_real_class, U_real_diff)
+    for res in results:
+        label = res['label']
+        num_classes = len(res['lower_bounds_unpruned'])
+        other_indices = [i for i in range(num_classes) if i != label]
 
-        # 3. Differential Safety Failure (P_real - P'_real <= 0 check)
-        # Check if the guaranteed minimum difference for the real class is non-positive.
-        if L_real_diff <= 0:
-             num_differential_safety_failures += 1
-        
-        # 4. Differential Robustness Margin Failure (Contextualized Metric)
-        num_classes = len(upper)
-        other_classes_indices = [c for c in range(num_classes) if c != label]
-        U_diff_others = upper[other_classes_indices]
-        
-        # Check if the lower bound of the real class is exceeded by ANY other class's upper bound
-        max_U_diff_other_classes = np.max(U_diff_others)
-        is_robustness_margin_failure = L_real_diff <= max_U_diff_other_classes
+        # --- 1. Unpruned Model (P) Analysis ---
+        L_unpruned_real = res['lower_bounds_unpruned'][label]
+        U_unpruned_others = res['upper_bounds_unpruned'][other_indices]
+        if L_unpruned_real > np.max(U_unpruned_others):
+            certified_correct_unpruned += 1
 
-        if is_robustness_margin_failure:
-            num_robustness_margin_failures += 1
+        # --- 2. Pruned Model (P') Analysis ---
+        L_pruned_real = res['lower_bounds_pruned'][label]
+        U_pruned_others = res['upper_bounds_pruned'][other_indices]
+        if L_pruned_real > np.max(U_pruned_others):
+            certified_correct_pruned += 1
             
-        # 5. Calculate the number of individual classes whose upper bound overlaps the real class lower bound
-        current_sample_overlap_count = 0
-        for c in other_classes_indices:
-            # Check if the non-real class's differential upper bound (U1-L2) is higher than the real class's differential lower bound (L1-U2)
-            if upper[c] > L_real_diff:
-                current_sample_overlap_count += 1
+        # --- 3. Differential (P vs P') Analysis ---
+        L_diff_real = res['lower_bounds_diff'][label]
+        U_diff_others = res['upper_bounds_diff'][other_indices]
         
-        # Metric 5 Accumulators
-        total_overlapping_classes_count_general += current_sample_overlap_count
+        total_lower_bound_diff_real_class += L_diff_real
         
-        if is_robustness_margin_failure:
-            total_overlapping_classes_count_conditional += current_sample_overlap_count
-             
+        # Safety Failure: Is it possible for the pruned model's confidence in the
+        # correct class to be higher? (i.e., is P_real - P'_real <= 0 possible?)
+        if L_diff_real <= 0:
+            diff_safety_failures += 1
+            
+        # Margin Failure: Can the drop in confidence for the real class be worse than
+        # the drop for another class? (i.e., is (L1-U2)_real <= (U1-L2)_other possible?)
+        if L_diff_real <= np.max(U_diff_others):
+            diff_margin_failures += 1
 
-    # 1. Average Bounds
-    avg_L_real = total_lower_bound_real_class / valid_samples
-    avg_U_real = total_upper_bound_real_class / valid_samples
+    # --- Calculate Final Metrics ---
+    # Unpruned Model
+    cert_acc_unpruned = (certified_correct_unpruned / num_samples) * 100
     
-    # 2. Highest Upper Bound
-    max_U_real = max_upper_bound_real_class
-    
-    # 5. Average Overlap Count (General)
-    avg_overlapping_classes_general = total_overlapping_classes_count_general / valid_samples
-    
-    # 5. Average Overlap Count (Conditional)
-    avg_overlapping_classes_conditional = 0.0
-    if num_robustness_margin_failures > 0:
-        avg_overlapping_classes_conditional = total_overlapping_classes_count_conditional / num_robustness_margin_failures
-    
-    
-    print("\n" + "="*70)
-    print(f"DIFFERENTIAL VERIFICATION METRICS ({valid_samples} SAMPLES)")
-    print(f"P: Unpruned Model | P': Pruned Model (Layer {args.prune_layer_idx}, Keep {args.tokens_to_keep})")
-    print("="*70)
-    
-    print("1. Average Differential Bounds (Real Class):")
-    print(f"   Lower Bound (Avg L1 - U2): {avg_L_real:.5f}")
-    print(f"   Upper Bound (Avg U1 - L2): {avg_U_real:.5f}")
-    
-    print("\n2. Highest Differential Upper Bound (Real Class):")
-    print(f"   Max (U1 - L2): {max_U_real:.5f}")
-    
-    print("\n3. Differential Safety Failure (P_real - P'_real <= 0):")
-    print(f"   Samples where Differential Lower Bound (L1-U2) for REAL class <= 0:")
-    print(f"   Count: {num_differential_safety_failures} / {valid_samples} ({num_differential_safety_failures/valid_samples*100:.2f}%)")
-    print("   Interpretation: This is a direct check if the differential interval guarantees P_real > P'_real.")
-    
-    print("\n4. Differential Robustness Margin Failure (Contextualized):")
-    print(f"   Samples where L_diff[real] <= Max(U_diff[other]):")
-    print(f"   Count: {num_robustness_margin_failures} / {valid_samples} ({num_robustness_margin_failures/valid_samples*100:.2f}%)")
-    print("   Interpretation: The guaranteed minimum difference for the real class is not higher than the maximum possible difference of any other class. This indicates an overlap in confidence intervals for the differential scores.")
+    # Pruned Model
+    cert_acc_pruned = (certified_correct_pruned / num_samples) * 100
+    # This directly answers your question: the number of failures is (num_samples - certified_correct_pruned)
+    robustness_failures_pruned = num_samples - certified_correct_pruned
 
-    print("\n5. Average Count of Overlapping Non-Real Classes:")
-    print(f"   General Average (All Samples): {avg_overlapping_classes_general:.3f} classes")
-    print(f"   Conditional Average (Failure Cases Only): {avg_overlapping_classes_conditional:.3f} classes")
-    print("   Interpretation: The conditional average shows the severity of the overlap when a robustness margin failure occurs.")
-    print("="*70)
+    # Differential
+    avg_L_diff_real = total_lower_bound_diff_real_class / num_samples
+    diff_safety_fail_rate = (diff_safety_failures / num_samples) * 100
+    diff_margin_fail_rate = (diff_margin_failures / num_samples) * 100
+
+    # --- Print Results Table ---
+    print("\n" + "="*80)
+    print(f"VERIFICATION ANALYSIS ({num_samples} SAMPLES, ε={args.eps})")
+    print(f"Unpruned (P) vs. Pruned (P') at Layer {args.prune_layer_idx}, Keeping {args.tokens_to_keep} Tokens")
+    print("="*80)
+
+    print("\n## Model Robustness Metrics\n")
+    print(f"**Certified Accuracy (Unpruned):** {cert_acc_unpruned:.2f}% ({certified_correct_unpruned}/{num_samples})")
+    print("  - Interpretation: Model is provably correct for this many samples.")
+    print(f"**Certified Accuracy (Pruned):** {cert_acc_pruned:.2f}% ({certified_correct_pruned}/{num_samples})")
+    print("  - Interpretation: Model is provably correct after being pruned.")
+    
+    print(f"\n**Robustness Failures (Pruned Model):** {robustness_failures_pruned} / {num_samples} samples")
+    print("  - This is the count you asked for: samples where the pruned model's lower bound for the\n"
+          "    correct class can be surpassed by the upper bound of another class.")
+    print("-" * 80)
+    
+    print("\n## Differential Analysis Metrics (P - P')\n")
+    print(f"**Guaranteed Confidence Drop (Avg):** {avg_L_diff_real:.5f}")
+    print("  - Interpretation: The average guaranteed drop in the correct class's logit value after pruning.\n"
+          "    A negative value means confidence is guaranteed to decrease on average.")
+    
+    print(f"\n**Potential Confidence Loss:** {diff_safety_failures} / {num_samples} ({diff_safety_fail_rate:.2f}%)")
+    print("  - Interpretation: Samples where the pruned model is NOT guaranteed to have lower confidence\n"
+          "    in the correct class than the unpruned model (i.e., L_diff[real] <= 0).")
+
+    print(f"\n**Guaranteed Margin Preservation Failure:** {diff_margin_failures} / {num_samples} ({diff_margin_fail_rate:.2f}%)")
+    print("  - Interpretation: Samples where the confidence drop for the correct class is NOT guaranteed\n"
+          "    to be smaller than the confidence drop for all other classes.")
+
+    print("="*80)
 
 
 # --- Main Execution Setup ---
-argv = sys.argv[1:]
-parser = Parser.get_parser()
+if __name__ == "__main__":
+    argv = sys.argv[1:]
+    parser = Parser.get_parser()
 
-parser.add_argument('--prune_tokens', action='store_true',
-                    help='Enable First-K token pruning in the P\' model for differential verification.')
-parser.add_argument('--prune_layer_idx', type=int, default=0,
-                    help='Transformer layer index AFTER which to apply token pruning in P\'.')
-parser.add_argument('--tokens_to_keep', type=int, default=9,
-                    help='Number of tokens to keep after pruning (e.g., 9 = [CLS] + 8 patches).')
+    parser.add_argument('--prune_tokens', action='store_true',
+                        help='Enable First-K token pruning in the P\' model for differential verification.')
+    parser.add_argument('--prune_layer_idx', type=int, default=0,
+                        help='Transformer layer index AFTER which to apply token pruning in P\'.')
+    parser.add_argument('--tokens_to_keep', type=int, default=9,
+                        help='Number of tokens to keep after pruning (e.g., 9 = [CLS] + 8 patches).')
 
-# --- CONFLICTING ARGUMENT DEFINITIONS REMOVED ---
-# We rely on the base Parser to define --debug, --verbose, and --log_error_terms_and_time.
-# --------------------------------------------------
+    args, _ = parser.parse_known_args(argv)
 
-args, _ = parser.parse_known_args(argv)
+    # --- Configuration for 100 Samples and Quiet Output ---
+    args.samples = 100
+    args.verbose = False
+    args.debug = False
+    args.log_error_terms_and_time = False
+    # --------------------------------------------------------
 
-# --- Configuration for 100 Samples and Quiet Output ---
-# We keep these lines to enforce a quiet run and set the sample count.
-args.samples = 100 
-args.verbose = False
-args.debug = False
-args.log_error_terms_and_time = False
-# --------------------------------------------------------
+    args = update_arguments(args)
+    args.error_reduction_method = 'box'
+    args.max_num_error_terms = 30000
 
-args = update_arguments(args)
-args.error_reduction_method = 'box'
-args.max_num_error_terms = 30000
+    # Set other necessary arguments based on your environment
+    args.with_lirpa_transformer = False
+    args.all_words = True
+    args.concretize_special_norm_error_together = True
+    args.num_input_error_terms = 28 * 28
 
-# Set other necessary arguments based on your environment
-args.with_lirpa_transformer = False
-args.all_words = True
-args.concretize_special_norm_error_together = True
-args.num_input_error_terms = 28 * 28
+    if args.gpu != -1:
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
 
+    if psutil.cpu_count() > 4 and args.cpu_range != "Default":
+        start, end = int(args.cpu_range.split("-")[0]), int(args.cpu_range.split("-")[1])
+        os.sched_setaffinity(0, {i for i in range(start, end + 1)})
 
-if args.gpu != -1:
-    # Note: args.gpu is supplied via command line and handled here
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
+    from data_utils import set_seeds
+    set_seeds(args.seed)
 
-if psutil.cpu_count() > 4 and args.cpu_range != "Default":
-    start, end = int(args.cpu_range.split("-")[0]), int(args.cpu_range.split("-")[1])
-    os.sched_setaffinity(0, {i for i in range(start, end + 1)})
+    test_data = mnist_test_dataloader(batch_size=1, shuffle=False)
+    set_seeds(args.seed)
 
-# Assuming data_utils is available for set_seeds
-from data_utils import set_seeds
-set_seeds(args.seed)
+    device = torch.device("cuda" if torch.cuda.is_available() and args.gpu != -1 else "cpu")
+    args.device = device
+    model = ViT(image_size=28, patch_size=7, num_classes=10, channels=1,
+                dim=64, depth=3, heads=4, mlp_dim=128, layer_norm_type="no_var").to(device)
 
-test_data = mnist_test_dataloader(batch_size=1, shuffle=False)
-set_seeds(args.seed)
+    model.load_state_dict(torch.load("mnist_transformer.pt", map_location=device))
+    model.eval()
 
-device = torch.device("cuda" if torch.cuda.is_available() and args.gpu != -1 else "cpu")
-args.device = device 
-model = ViT(image_size=28, patch_size=7, num_classes=10, channels=1,
-            dim=64, depth=3, heads=4, mlp_dim=128, layer_norm_type="no_var").to(device)
+    print(f"--- Differential Verification Setup ---")
+    print(f"Target Samples: {args.samples}")
+    print(f"Pruning Active: {args.prune_tokens} (Layer {args.prune_layer_idx}, Keep {args.tokens_to_keep})")
+    print(f"Epsilon: {args.eps}")
+    print("---------------------------------------")
 
-# Ensure 'mnist_transformer.pt' is available
-model.load_state_dict(torch.load("mnist_transformer.pt", map_location=device))
-model.eval()
+    logger = FakeLogger()
 
-print(f"--- Differential Verification Setup ---")
-print(f"Target Samples: {args.samples}")
-print(f"Pruning Active: {args.prune_tokens} (Layer {args.prune_layer_idx}, Keep {args.tokens_to_keep})")
-print(f"Epsilon: {args.eps}")
-print("---------------------------------------")
+    data_normalized = []
+    for i, (x, y) in enumerate(test_data):
+        data_normalized.append({
+            "label": y.to(device),
+            "image": x.to(device)
+        })
+        if i == args.samples - 1:
+            break
 
-logger = FakeLogger()
-
-data_normalized = []
-for i, (x, y) in enumerate(test_data):
-    data_normalized.append({
-        "label": y.to(device),
-        "image": x.to(device)
-    })
-    # Ensure we only grab up to 'args.samples' amount of data
-    if i == args.samples - 1:
-        break
-
-
-run_pgd = args.pgd if hasattr(args, 'pgd') else False
-if run_pgd:
-    # PGD attack logic (omitted for brevity, as we focus on verification)
-    print("PGD attack execution skipped. Focused on differential verification.")
-else:
-    if not hasattr(args, 'eps') or args.eps <= 0:
-        # Note: 'eps' should now be accessible since it was passed via command line
-        print("Argument --eps must be set to a positive value for differential verification.")
+    run_pgd = args.pgd if hasattr(args, 'pgd') else False
+    if run_pgd:
+        print("PGD attack execution skipped. Focused on differential verification.")
     else:
-        verifier = IntervalBoundDiffVerViT(args, model, logger, num_classes=10, normalizer=normalizer)
-        
-        # Run verification and collect the results list
-        aggregated_results = verifier.run(data_normalized)
-        
-        # Analyze the collected data and print the metrics
-        analyze_results(aggregated_results, args)
+        if not hasattr(args, 'eps') or args.eps <= 0:
+            print("Argument --eps must be set to a positive value for differential verification.")
+        else:
+            verifier = IntervalBoundDiffVerViT(args, model, logger, num_classes=10, normalizer=normalizer)
+            
+            # Run verification and collect the results list
+            # NOTE: Your verifier must be updated to return the new data structure!
+            aggregated_results = verifier.run(data_normalized)
+            
+            # Analyze the collected data and print the metrics
+            analyze_results(aggregated_results, args)
