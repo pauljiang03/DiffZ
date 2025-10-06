@@ -105,11 +105,6 @@ def analyze_all_results(results_diff: List[Dict[str, Any]],
     print("\n2. Highest Differential Upper Bound (Real Class):")
     print(f"   Max (U_P - L_P'): {max_U_real:.5f}")
     
-    print("\n3. Pruning Efficacy/Safety Metric:")
-    print(f"   Samples where Differential Lower Bound (L_P - U_P') for REAL class <= 0:")
-    print(f"   Count: {num_verification_failures} / {valid_samples} ({num_verification_failures/valid_samples*100:.2f}%)")
-    print("   Interpretation: This indicates samples where the difference P_real - P'_real might be non-positive.")
-    
     # --- Part 2: Individual Robustness Metrics ---
     analyze_robustness(results_p, "P (Unpruned)")
     analyze_robustness(results_p_prime, "P' (Pruned)")
@@ -129,7 +124,7 @@ parser.add_argument('--tokens_to_keep', type=int, default=9,
 
 args, _ = parser.parse_known_args(argv)
 
-args.samples = 5
+args.samples = 100
 args.verbose = False
 args.debug = False
 args.log_error_terms_and_time = False
