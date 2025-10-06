@@ -14,7 +14,7 @@ from vit_attack import pgd_attack
 
 # --- Import the updated verifier ---
 # Ensure IntervalBoundVerifier.py is in the same directory
-from IntervalBoundVerifier import IntervalBoundDiffVerViT, sample_correct_samples 
+from Verifiers.IntervalBoundVerifier import IntervalBoundDiffVerViT, sample_correct_samples 
 
 
 def analyze_results(results: List[Dict[str, Any]], args):
