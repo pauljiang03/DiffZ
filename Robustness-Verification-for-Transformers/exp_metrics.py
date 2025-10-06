@@ -19,12 +19,19 @@ from Verifiers.IntervalBoundVerifier import IntervalBoundDiffVerViT, sample_corr
 
 def analyze_results(results: List[Dict[str, Any]], args):
     """
-    Analyzes the collected differential bounds for the three required metrics.
+    Analyzes the collected differential bounds for the three required metrics, 
+    plus the new Differential Robustness Margin Failure metric.
     """
     total_lower_bound_real_class = 0.0
     total_upper_bound_real_class = 0.0
     max_upper_bound_real_class = -float('inf')
-    num_verification_failures = 0
+    
+    # Renamed counter for clarity on Metric 3
+    num_differential_safety_failures = 0 
+    
+    # New counter for Metric 4 (Contextualized Robustness Margin)
+    num_robustness_margin_failures = 0
+    
     valid_samples = len(results)
 
     if valid_samples == 0:
@@ -37,21 +44,30 @@ def analyze_results(results: List[Dict[str, Any]], args):
         upper = result['upper_bounds']
 
         # 1. & 2. Metrics for the Real Class (Label)
-        L_real = lower[label]
-        U_real = upper[label]
+        L_real_diff = lower[label]
+        U_real_diff = upper[label]
         
-        total_lower_bound_real_class += L_real
-        total_upper_bound_real_class += U_real
-        max_upper_bound_real_class = max(max_upper_bound_real_class, U_real)
+        total_lower_bound_real_class += L_real_diff
+        total_upper_bound_real_class += U_real_diff
+        max_upper_bound_real_class = max(max_upper_bound_real_class, U_real_diff)
 
-        # 3. Pruning Efficacy/Safety Metric (Proxy):
-        # We check if the lower bound of the difference (P_real - P'_real) is non-positive.
-        # This means P_real <= P'_real is possible, which is a potential safety failure 
-        # (pruning P' has shifted the score enough to violate the original prediction ordering).
-        L_real_diff = lower[label] 
-        
+        # 3. Differential Safety Failure (P_real - P'_real <= 0 check)
+        # Check if the guaranteed minimum difference for the real class is non-positive.
         if L_real_diff <= 0:
-             num_verification_failures += 1
+             num_differential_safety_failures += 1
+        
+        # 4. Differential Robustness Margin Failure (Contextualized Metric)
+        # Failure occurs if the lower bound of the real class difference (L1-U2) 
+        # is less than or equal to the highest upper bound of any other class difference (U1-L2).
+        # This implies L_diff[real] <= max(U_diff[other]), meaning the confidence intervals overlap.
+        
+        # Get the upper bounds of the differential score for all NON-REAL classes
+        other_classes_indices = [c for c in range(len(upper)) if c != label]
+        U_diff_others = upper[other_classes_indices]
+        max_U_diff_other_classes = np.max(U_diff_others)
+
+        if L_real_diff <= max_U_diff_other_classes:
+            num_robustness_margin_failures += 1
              
 
     # 1. Average Bounds
@@ -73,12 +89,16 @@ def analyze_results(results: List[Dict[str, Any]], args):
     print("\n2. Highest Differential Upper Bound (Real Class):")
     print(f"   Max (U1 - L2): {max_U_real:.5f}")
     
-    print("\n3. Pruning Efficacy/Safety Metric (L_diff[real_class] <= 0):")
+    print("\n3. Differential Safety Failure (P_real - P'_real <= 0):")
     print(f"   Samples where Differential Lower Bound (L1-U2) for REAL class <= 0:")
-    print(f"   Count: {num_verification_failures} / {valid_samples} ({num_verification_failures/valid_samples*100:.2f}%)")
-    print("   Interpretation: This indicates the number of samples where the difference P_real - P'_real might be non-positive.")
+    print(f"   Count: {num_differential_safety_failures} / {valid_samples} ({num_differential_safety_failures/valid_samples*100:.2f}%)")
+    print("   Interpretation: This is a direct check if the differential interval guarantees P_real > P'_real.")
+    
+    print("\n4. Differential Robustness Margin Failure (Contextualized):")
+    print(f"   Samples where L_diff[real] <= Max(U_diff[other]):")
+    print(f"   Count: {num_robustness_margin_failures} / {valid_samples} ({num_robustness_margin_failures/valid_samples*100:.2f}%)")
+    print("   Interpretation: The guaranteed minimum difference for the real class is not higher than the maximum possible difference of any other class. This indicates an overlap in confidence intervals for the differential scores.")
     print("="*70)
-
 
 
 # --- Main Execution Setup ---
