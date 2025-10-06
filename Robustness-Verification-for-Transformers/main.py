@@ -4,9 +4,8 @@ import psutil
 import torch
 
 from Parser import Parser, update_arguments
-# --- MODIFIED IMPORT HERE ---
 # Import the helper function and the new verifier class
-from IntervalBoundVerifier import IntervalBoundDiffVerViT, sample_correct_samples 
+from Verifiers.IntervalBoundVerifier import IntervalBoundDiffVerViT, sample_correct_samples 
 from fake_logger import FakeLogger
 from mnist import mnist_test_dataloader, normalizer
 from vit import ViT
