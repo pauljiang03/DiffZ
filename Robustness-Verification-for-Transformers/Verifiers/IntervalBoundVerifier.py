@@ -85,24 +85,26 @@ class IntervalBoundDiffVerViT(Verifier):
         self.token_pruning_enabled = original_prune_enabled
         return bounds
 
-    def run(self, data, mode: str = 'differential') -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]]:
-    
-        assert mode in ['differential', 'individual'], "Mode must be 'differential' or 'individual'"
-    
+    def run(self, data) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """
+        Runs verification and returns three lists of results:
+        1. Differential bounds ([L_P - U_P', U_P - L_P'])
+        2. Individual bounds for P ([L_P, U_P])
+        3. Individual bounds for P' ([L_P', U_P'])
+        """
         examples = sample_correct_samples(self.args, data, self.target)
         if self.eps <= 0 or len(examples) == 0:
             print("Verification setup issues (eps<=0 or no samples found). Exiting.")
-            return [] if mode == 'differential' else ([], [])
+            return [], [], []
 
-    # Lists to store results based on the chosen mode
         results_list_diff = []
         results_list_p = []
         results_list_p_prime = []
-    
+        
         file_path = os.path.join(self.results_directory, self.res_filename)
         Path(file_path).parent.mkdir(parents=True, exist_ok=True)
-    
-        print(f"Running Verification (Mode: {mode}) for {len(examples)} samples...")
+        
+        print(f"Running Verification for {len(examples)} samples...")
         print(f"Results log file: {file_path}")
 
         is_pruned_val = str(self.args.prune_tokens).lower()
@@ -112,14 +114,11 @@ class IntervalBoundDiffVerViT(Verifier):
         with open(file_path, "w") as self.results_file:
             header = "index,class,lower_bound,upper_bound,timing,is_pruned,prune_layer,tokens_kept,bound_type\n"
             self.results_file.write(header)
-        
+            
             for i, example in enumerate(examples):
                 start = time.time()
-            
-                embeddings = example["image"]
-                embeddings = embeddings if self.args.cpu else embeddings.cuda()
+                embeddings = example["image"].to(self.device)
 
-            # 1. Compute bounds for P (Unpruned) and P' (Pruned)
                 bounds_P = self._run_single_model_bounds(embeddings, self.eps, is_pruned=False)
                 bounds_P_prime = self._run_single_model_bounds(embeddings, self.eps, is_pruned=self.args.prune_tokens)
 
@@ -127,60 +126,55 @@ class IntervalBoundDiffVerViT(Verifier):
                     print(f"Warning: Verification failed for Sample {i}. Skipping.")
                     continue
 
-            # 2. Concretize P and P' bounds to get [L, U] for each
                 lower_P, upper_P = bounds_P.concretize()
                 lower_P_prime, upper_P_prime = bounds_P_prime.concretize()
-            
+                
                 timing = time.time() - start
                 sample_label = example['label'].item()
-    
-                if mode == 'differential':
-                # 3a. Calculate Differential Bounds [L1 - U2, U1 - L2]
-                    lower_bound_diff = lower_P - upper_P_prime
-                    upper_bound_diff = upper_P - lower_P_prime
                 
-                    lower_bounds_np = lower_bound_diff[0].cpu().numpy()
-                    upper_bounds_np = upper_bound_diff[0].cpu().numpy()
+                # 1. Calculate and store Differential Bounds
+                lower_bound_diff = lower_P - upper_P_prime
+                upper_bound_diff = upper_P - lower_P_prime
+                
+                lower_bounds_np_diff = lower_bound_diff[0].cpu().numpy()
+                upper_bounds_np_diff = upper_bound_diff[0].cpu().numpy()
 
-                    results_list_diff.append({
-                        'label': sample_label,
-                        'lower_bounds': lower_bounds_np,
-                        'upper_bounds': upper_bounds_np,
-                        'index': i, 'time': timing
-                    })
-                # Log differential bounds to file
-                    for c in range(self.num_classes):
-                        self.results_file.write(f"{i},{c},{lower_bounds_np[c]:f},{upper_bounds_np[c]:f},{timing:f},{is_pruned_val},{prune_layer_val},{tokens_kept_val},differential\n")
+                results_list_diff.append({
+                    'label': sample_label,
+                    'lower_bounds': lower_bounds_np_diff,
+                    'upper_bounds': upper_bounds_np_diff,
+                    'index': i, 'time': timing
+                })
+                
+                # 2. Store individual bounds for P
+                results_list_p.append({
+                    'label': sample_label,
+                    'lower_bounds': lower_P[0].cpu().numpy(),
+                    'upper_bounds': upper_P[0].cpu().numpy(),
+                    'index': i, 'time': timing
+                })
 
-                else: # mode == 'individual'
-                # 3b. Store individual bounds
-                    results_list_p.append({
-                        'label': sample_label,
-                        'lower_bounds': lower_P[0].cpu().numpy(),
-                        'upper_bounds': upper_P[0].cpu().numpy(),
-                        'index': i, 'time': timing
-                    })
-                    results_list_p_prime.append({
-                        'label': sample_label,
-                        'lower_bounds': lower_P_prime[0].cpu().numpy(),
-                        'upper_bounds': upper_P_prime[0].cpu().numpy(),
-                        'index': i, 'time': timing
-                    })
-                    for c in range(self.num_classes):
-                        self.results_file.write(f"{i},{c},{lower_P[0,c]:f},{upper_P[0,c]:f},{timing:f},False,-1,-1,individual_P\n")
-                        self.results_file.write(f"{i},{c},{lower_P_prime[0,c]:f},{upper_P_prime[0,c]:f},{timing:f},{is_pruned_val},{prune_layer_val},{tokens_kept_val},individual_P_prime\n")
+                # 3. Store individual bounds for P'
+                results_list_p_prime.append({
+                    'label': sample_label,
+                    'lower_bounds': lower_P_prime[0].cpu().numpy(),
+                    'upper_bounds': upper_P_prime[0].cpu().numpy(),
+                    'index': i, 'time': timing
+                })
+
+                # Log all bound types to the CSV file
+                for c in range(self.num_classes):
+                    self.results_file.write(f"{i},{c},{lower_bounds_np_diff[c]:f},{upper_bounds_np_diff[c]:f},{timing:.4f},{is_pruned_val},{prune_layer_val},{tokens_kept_val},differential\n")
+                    self.results_file.write(f"{i},{c},{lower_P[0,c]:f},{upper_P[0,c]:f},{timing:.4f},False,-1,-1,individual_P\n")
+                    self.results_file.write(f"{i},{c},{lower_P_prime[0,c]:f},{upper_P_prime[0,c]:f},{timing:.4f},{is_pruned_val},{prune_layer_val},{tokens_kept_val},individual_P_prime\n")
 
                 self.results_file.flush()
-            
-                if (i + 1) % 20 == 0:
+                
+                if (i + 1) % 10 == 0:
                     print(f"Completed {i+1}/{len(examples)} samples...")
 
         print(f"\nCompleted verification for {len(examples)} samples.")
-    
-        if mode == 'differential':
-            return results_list_diff
-        else: # mode == 'individual'
-            return results_list_p, results_list_p_prime
+        return results_list_diff, results_list_p, results_list_p_prime
 
 
     # --- Remaining methods (_bound_input, _bound_layer, etc.) are kept as they are. ---
