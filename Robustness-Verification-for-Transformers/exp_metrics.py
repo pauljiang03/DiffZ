@@ -19,19 +19,8 @@ from Verifiers.IntervalBoundVerifier import IntervalBoundDiffVerViT, sample_corr
 
 def analyze_results(results: List[Dict[str, Any]], args):
     """
-    Analyzes verification results to compare unpruned (P) and pruned (P') models.
-
-    This function assumes the 'results' list contains dictionaries with the following structure
-    for each sample, which must be returned by your verifier:
-    {
-        'label': int,
-        'lower_bounds_unpruned': np.ndarray,
-        'upper_bounds_unpruned': np.ndarray,
-        'lower_bounds_pruned': np.ndarray,
-        'upper_bounds_pruned': np.ndarray,
-        'lower_bounds_diff': np.ndarray,  // Bounds on (P - P')
-        'upper_bounds_diff': np.ndarray,  // Bounds on (P - P')
-    }
+    Analyzes the collected differential bounds (P - P') to evaluate the impact of pruning.
+    This function uses ONLY the differential bounds provided by the verifier.
     """
     if not results:
         print("No valid samples were processed to analyze.")
@@ -40,98 +29,99 @@ def analyze_results(results: List[Dict[str, Any]], args):
     # --- Metric Accumulators ---
     num_samples = len(results)
     
-    # For Unpruned Model (P)
-    certified_correct_unpruned = 0
+    total_lower_bound_diff_real = 0.0
+    non_monotonic_confidence_failures = 0
+    margin_preservation_failures = 0
     
-    # For Pruned Model (P')
-    certified_correct_pruned = 0
-    
-    # For Differential Analysis (P - P')
-    diff_safety_failures = 0
-    diff_margin_failures = 0
-    total_lower_bound_diff_real_class = 0.0
+    # For calculating the severity of failures
+    total_overlapping_classes_in_failures = 0
 
     for res in results:
+        # NOTE: 'lower_bounds' and 'upper_bounds' from your verifier are the
+        # bounds on the DIFFERENCE between the unpruned and pruned models (P - P').
         label = res['label']
-        num_classes = len(res['lower_bounds_unpruned'])
+        lower_diff = res['lower_bounds']
+        upper_diff = res['upper_bounds']
+
+        num_classes = len(lower_diff)
         other_indices = [i for i in range(num_classes) if i != label]
 
-        # --- 1. Unpruned Model (P) Analysis ---
-        L_unpruned_real = res['lower_bounds_unpruned'][label]
-        U_unpruned_others = res['upper_bounds_unpruned'][other_indices]
-        if L_unpruned_real > np.max(U_unpruned_others):
-            certified_correct_unpruned += 1
-
-        # --- 2. Pruned Model (P') Analysis ---
-        L_pruned_real = res['lower_bounds_pruned'][label]
-        U_pruned_others = res['upper_bounds_pruned'][other_indices]
-        if L_pruned_real > np.max(U_pruned_others):
-            certified_correct_pruned += 1
-            
-        # --- 3. Differential (P vs P') Analysis ---
-        L_diff_real = res['lower_bounds_diff'][label]
-        U_diff_others = res['upper_bounds_diff'][other_indices]
+        # Get the guaranteed bounds for the difference of the correct class
+        L_diff_real = lower_diff[label]
         
-        total_lower_bound_diff_real_class += L_diff_real
+        # --- Accumulate data for metrics ---
+        total_lower_bound_diff_real += L_diff_real
         
-        # Safety Failure: Is it possible for the pruned model's confidence in the
-        # correct class to be higher? (i.e., is P_real - P'_real <= 0 possible?)
+        # Metric 2: Non-Monotonic Confidence Risk
+        # Does the lower bound of the difference dip below zero?
+        # If L_diff_real <= 0, it's possible that P_real <= P'_real, meaning the
+        # pruned model could be MORE confident than the original, which is non-monotonic.
         if L_diff_real <= 0:
-            diff_safety_failures += 1
+            non_monotonic_confidence_failures += 1
             
-        # Margin Failure: Can the drop in confidence for the real class be worse than
-        # the drop for another class? (i.e., is (L1-U2)_real <= (U1-L2)_other possible?)
-        if L_diff_real <= np.max(U_diff_others):
-            diff_margin_failures += 1
+        # Metric 3: Robustness Margin Preservation Failure
+        # Is the guaranteed drop for the real class potentially worse than the
+        # drop for some other class? This happens if L_diff[real] <= max(U_diff[other]).
+        max_U_diff_others = np.max(upper_diff[other_indices])
+        is_failure = L_diff_real <= max_U_diff_others
+        
+        if is_failure:
+            margin_preservation_failures += 1
+            
+            # Metric 4: Severity of Failure
+            # If it's a failure, count how many other classes contribute to it.
+            overlapping_classes_count = np.sum(upper_diff[other_indices] >= L_diff_real)
+            total_overlapping_classes_in_failures += overlapping_classes_count
 
     # --- Calculate Final Metrics ---
-    # Unpruned Model
-    cert_acc_unpruned = (certified_correct_unpruned / num_samples) * 100
+    # Metric 1
+    avg_L_diff_real = total_lower_bound_diff_real / num_samples
     
-    # Pruned Model
-    cert_acc_pruned = (certified_correct_pruned / num_samples) * 100
-    # This directly answers your question: the number of failures is (num_samples - certified_correct_pruned)
-    robustness_failures_pruned = num_samples - certified_correct_pruned
-
-    # Differential
-    avg_L_diff_real = total_lower_bound_diff_real_class / num_samples
-    diff_safety_fail_rate = (diff_safety_failures / num_samples) * 100
-    diff_margin_fail_rate = (diff_margin_failures / num_samples) * 100
+    # Metric 2
+    non_monotonic_fail_rate = (non_monotonic_confidence_failures / num_samples) * 100
+    
+    # Metric 3
+    margin_fail_rate = (margin_preservation_failures / num_samples) * 100
+    
+    # Metric 4
+    avg_severity = 0.0
+    if margin_preservation_failures > 0:
+        avg_severity = total_overlapping_classes_in_failures / margin_preservation_failures
 
     # --- Print Results Table ---
     print("\n" + "="*80)
-    print(f"VERIFICATION ANALYSIS ({num_samples} SAMPLES, ε={args.eps})")
-    print(f"Unpruned (P) vs. Pruned (P') at Layer {args.prune_layer_idx}, Keeping {args.tokens_to_keep} Tokens")
+    print(f"DIFFERENTIAL VERIFICATION METRICS ({num_samples} SAMPLES, ε={args.eps})")
+    print(f"Analysis of the change from Unpruned (P) to Pruned (P')")
     print("="*80)
 
-    print("\n## Model Robustness Metrics\n")
-    print(f"**Certified Accuracy (Unpruned):** {cert_acc_unpruned:.2f}% ({certified_correct_unpruned}/{num_samples})")
-    print("  - Interpretation: Model is provably correct for this many samples.")
-    print(f"**Certified Accuracy (Pruned):** {cert_acc_pruned:.2f}% ({certified_correct_pruned}/{num_samples})")
-    print("  - Interpretation: Model is provably correct after being pruned.")
-    
-    print(f"\n**Robustness Failures (Pruned Model):** {robustness_failures_pruned} / {num_samples} samples")
-    print("  - This is the count you asked for: samples where the pruned model's lower bound for the\n"
-          "    correct class can be surpassed by the upper bound of another class.")
+    print("\n## Metric 1: Guaranteed Confidence Change (Correct Class)\n")
+    print(f"**Average Lower Bound on Difference (P_real - P'_real):** {avg_L_diff_real:.5f}")
+    print("  - **Interpretation:** The average guaranteed change in the correct class's logit.\n"
+          "    A negative value means confidence is guaranteed to drop after pruning.")
     print("-" * 80)
-    
-    print("\n## Differential Analysis Metrics (P - P')\n")
-    print(f"**Guaranteed Confidence Drop (Avg):** {avg_L_diff_real:.5f}")
-    print("  - Interpretation: The average guaranteed drop in the correct class's logit value after pruning.\n"
-          "    A negative value means confidence is guaranteed to decrease on average.")
-    
-    print(f"\n**Potential Confidence Loss:** {diff_safety_failures} / {num_samples} ({diff_safety_fail_rate:.2f}%)")
-    print("  - Interpretation: Samples where the pruned model is NOT guaranteed to have lower confidence\n"
-          "    in the correct class than the unpruned model (i.e., L_diff[real] <= 0).")
 
-    print(f"\n**Guaranteed Margin Preservation Failure:** {diff_margin_failures} / {num_samples} ({diff_margin_fail_rate:.2f}%)")
-    print("  - Interpretation: Samples where the confidence drop for the correct class is NOT guaranteed\n"
-          "    to be smaller than the confidence drop for all other classes.")
+    print("\n## Metric 2: Non-Monotonic Confidence Risk\n")
+    print(f"**Risk Count:** {non_monotonic_confidence_failures} / {num_samples} ({non_monotonic_fail_rate:.2f}%)")
+    print("  - **Interpretation:** Samples where the pruned model is NOT guaranteed to be less\n"
+          "    confident than the original. Pruning should ideally always reduce confidence.")
+    print("-" * 80)
 
+    print("\n## Metric 3: Margin Preservation Failure\n")
+    print(f"**Failure Count:** {margin_preservation_failures} / {num_samples} ({margin_fail_rate:.2f}%)")
+    print("  - **Interpretation:** Samples where the prediction margin is NOT guaranteed to be preserved.\n"
+          "    The confidence drop for the correct class could be worse than for another class.")
+    print("-" * 80)
+
+    print("\n## Metric 4: Average Failure Severity\n")
+    print(f"**Avg. Overlapping Classes (in failure cases):** {avg_severity:.2f}")
+    print("  - **Interpretation:** When the margin fails (Metric 3), this is the average number of\n"
+          "    other classes that pose a risk. Higher is worse.")
     print("="*80)
-
+    print("\n**Note:** These metrics analyze the *change* due to pruning. To get the final\n"
+          "Certified Accuracy of the pruned model, the verifier must be modified.")
 
 # --- Main Execution Setup ---
+# (The rest of your script from if __name__ == "__main__": onwards stays the same)
 if __name__ == "__main__":
     argv = sys.argv[1:]
     parser = Parser.get_parser()
@@ -210,7 +200,6 @@ if __name__ == "__main__":
             verifier = IntervalBoundDiffVerViT(args, model, logger, num_classes=10, normalizer=normalizer)
             
             # Run verification and collect the results list
-            # NOTE: Your verifier must be updated to return the new data structure!
             aggregated_results = verifier.run(data_normalized)
             
             # Analyze the collected data and print the metrics
