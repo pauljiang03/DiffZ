@@ -19,18 +19,21 @@ from Verifiers.IntervalBoundVerifier import IntervalBoundDiffVerViT, sample_corr
 
 def analyze_results(results: List[Dict[str, Any]], args):
     """
-    Analyzes the collected differential bounds for the three required metrics, 
-    plus the new Differential Robustness Margin Failure metric.
+    Analyzes the collected differential bounds for the required metrics, 
+    including both general and conditional averages for overlapping classes.
     """
     total_lower_bound_real_class = 0.0
     total_upper_bound_real_class = 0.0
     max_upper_bound_real_class = -float('inf')
     
-    # Renamed counter for clarity on Metric 3
     num_differential_safety_failures = 0 
+    num_robustness_margin_failures = 0 # Denominator for the conditional average (Metric 5)
     
-    # New counter for Metric 4 (Contextualized Robustness Margin)
-    num_robustness_margin_failures = 0
+    # Metric 5 General: Accumulator for the total count of individual non-real classes that overlap the real class's lower bound (across ALL samples)
+    total_overlapping_classes_count_general = 0.0 
+    
+    # Metric 5 Conditional: Accumulator for the total count of overlapping classes (only in failure cases)
+    total_overlapping_classes_count_conditional = 0.0
     
     valid_samples = len(results)
 
@@ -57,17 +60,29 @@ def analyze_results(results: List[Dict[str, Any]], args):
              num_differential_safety_failures += 1
         
         # 4. Differential Robustness Margin Failure (Contextualized Metric)
-        # Failure occurs if the lower bound of the real class difference (L1-U2) 
-        # is less than or equal to the highest upper bound of any other class difference (U1-L2).
-        # This implies L_diff[real] <= max(U_diff[other]), meaning the confidence intervals overlap.
-        
-        # Get the upper bounds of the differential score for all NON-REAL classes
-        other_classes_indices = [c for c in range(len(upper)) if c != label]
+        num_classes = len(upper)
+        other_classes_indices = [c for c in range(num_classes) if c != label]
         U_diff_others = upper[other_classes_indices]
+        
+        # Check if the lower bound of the real class is exceeded by ANY other class's upper bound
         max_U_diff_other_classes = np.max(U_diff_others)
+        is_robustness_margin_failure = L_real_diff <= max_U_diff_other_classes
 
-        if L_real_diff <= max_U_diff_other_classes:
+        if is_robustness_margin_failure:
             num_robustness_margin_failures += 1
+            
+        # 5. Calculate the number of individual classes whose upper bound overlaps the real class lower bound
+        current_sample_overlap_count = 0
+        for c in other_classes_indices:
+            # Check if the non-real class's differential upper bound (U1-L2) is higher than the real class's differential lower bound (L1-U2)
+            if upper[c] > L_real_diff:
+                current_sample_overlap_count += 1
+        
+        # Metric 5 Accumulators
+        total_overlapping_classes_count_general += current_sample_overlap_count
+        
+        if is_robustness_margin_failure:
+            total_overlapping_classes_count_conditional += current_sample_overlap_count
              
 
     # 1. Average Bounds
@@ -76,6 +91,15 @@ def analyze_results(results: List[Dict[str, Any]], args):
     
     # 2. Highest Upper Bound
     max_U_real = max_upper_bound_real_class
+    
+    # 5. Average Overlap Count (General)
+    avg_overlapping_classes_general = total_overlapping_classes_count_general / valid_samples
+    
+    # 5. Average Overlap Count (Conditional)
+    avg_overlapping_classes_conditional = 0.0
+    if num_robustness_margin_failures > 0:
+        avg_overlapping_classes_conditional = total_overlapping_classes_count_conditional / num_robustness_margin_failures
+    
     
     print("\n" + "="*70)
     print(f"DIFFERENTIAL VERIFICATION METRICS ({valid_samples} SAMPLES)")
@@ -98,6 +122,11 @@ def analyze_results(results: List[Dict[str, Any]], args):
     print(f"   Samples where L_diff[real] <= Max(U_diff[other]):")
     print(f"   Count: {num_robustness_margin_failures} / {valid_samples} ({num_robustness_margin_failures/valid_samples*100:.2f}%)")
     print("   Interpretation: The guaranteed minimum difference for the real class is not higher than the maximum possible difference of any other class. This indicates an overlap in confidence intervals for the differential scores.")
+
+    print("\n5. Average Count of Overlapping Non-Real Classes:")
+    print(f"   General Average (All Samples): {avg_overlapping_classes_general:.3f} classes")
+    print(f"   Conditional Average (Failure Cases Only): {avg_overlapping_classes_conditional:.3f} classes")
+    print("   Interpretation: The conditional average shows the severity of the overlap when a robustness margin failure occurs.")
     print("="*70)
 
 
