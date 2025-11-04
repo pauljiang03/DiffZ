@@ -472,11 +472,32 @@ class VerifierZonotopeViT(Verifier):
         attention_scores = self.do_dot_product(query, key, layer_num)
         attention_scores = attention_scores.multiply(attn.scale)
 
+        
+
         if not self.args.keep_intermediate_zonotopes:
             del query
             del key
+        '''
+        #attention_probs = attention_scores.softmax(verbose=self.verbose, no_constraints=not self.args.add_softmax_sum_constraint)
+        original
+        '''
+        '''
+        new
+        '''
+        if self.token_pruning_enabled and layer_num == self.prune_layer_idx:
+            num_tokens = attention_scores.zonotope_w.shape[1] 
+            keep = self.tokens_to_keep + 1 
+            mask = torch.zeros((1, num_tokens, num_tokens), device=attention_scores.zonotope_w.device)
+            mask[:, :, :keep] = 1.0  
+            mask_z = attention_scores.new_from_constant(mask)  # Create a Zonotope mask with same args
+            attention_scores = attention_scores.mask_softmax(mask_z, verbose=self.verbose)
+        else:
+            attention_probs = attention_scores.softmax(verbose=self.verbose,
+                no_constraints=not self.args.add_softmax_sum_constraint)
 
-        attention_probs = attention_scores.softmax(verbose=self.verbose, no_constraints=not self.args.add_softmax_sum_constraint)
+        '''
+        end new
+        '''
 
         value = bounds_input.dense(attn.to_v)
 
