@@ -1730,22 +1730,46 @@ class Zonotope:
         return zonotope_softmax_sum_constrained
 
     def mask_softmax(self, mask_z, verbose=False):
-        # Ensure mask_z has same error term dimension as self
+        """
+        Applies a binary mask before softmax.
+        Masked (0) positions get a large negative constant to
+        force their probability to ~0 after softmax.
+        Supports both 3D and 4D zonotopes (with dummy head dimension).
+        """
+    
+        # --- Align error-term dimensions ---
         mask_z = mask_z.expand_error_terms_to_match_zonotope(self)
-        
-        # Create a large negative constant (for pruned tokens)
-        large_neg = self.new_from_constant(
-            torch.full_like(self.zonotope_w[0], -1e9)
-        )
-        large_neg = large_neg.expand_error_terms_to_match_zonotope(self)
     
-        # Compute masked logits
-        masked_logits = self.multiply(mask_z).add(
-            (mask_z.add(-1)).multiply(large_neg)
+        # --- Align shapes (flatten head dim if needed) ---
+        if self.zonotope_w.ndim == 4:
+            # (E, A, N, D) → (E, N, D)
+            self_flat = make_zonotope_new_weights_same_args(
+                self.zonotope_w.mean(dim=1), source_zonotope=self, clone=False
+            )
+            mask_flat = make_zonotope_new_weights_same_args(
+                mask_z.zonotope_w.mean(dim=1), source_zonotope=mask_z, clone=False
+            )
+        else:
+            self_flat = self
+            mask_flat = mask_z
+    
+        # --- Create large negative constant for masked tokens ---
+        large_neg = self_flat.new_from_constant(
+            torch.full_like(self_flat.zonotope_w[0], -1e9)
+        )
+        large_neg = large_neg.expand_error_terms_to_match_zonotope(self_flat)
+    
+        # --- Apply masking ---
+        masked_logits = self_flat.multiply(mask_flat).add(
+            (mask_flat.add(-1)).multiply(large_neg)
         )
     
-        # Standard softmax on masked logits
+        # --- Run normal softmax (it expects 4D so re-add dummy head) ---
+        if masked_logits.zonotope_w.ndim == 3:
+            masked_logits.zonotope_w = masked_logits.zonotope_w.unsqueeze(1)
+    
         return masked_logits.softmax(verbose=verbose)
+
 
 
 
