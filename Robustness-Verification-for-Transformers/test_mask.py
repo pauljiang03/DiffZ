@@ -12,8 +12,8 @@ args = Namespace(
     use_dot_product_variant3=False,
     use_other_dot_product_ordering=False,  # add this one too
 )
-dummy_value = torch.randn(1, 4)
-z = Zonotope(args=args, p=float('inf'), eps=1e-6, perturbed_word_index=0, value=dummy_value)
+dummy_value = torch.randn(4, 1)
+z = Zonotope(args=args, p=11, eps=1e-6, perturbed_word_index=0, value=dummy_value)
 
 # --- Helper to create a simple zonotope with fixed logits ---
 def make_constant_zonotope(values):
