@@ -265,12 +265,11 @@ class IntervalBoundDiffVerViT(Verifier):
 
         bounds_input = bounds_input.expand_error_terms_to_match_zonotope(attention)
         attention = attention.add(bounds_input)  
-        '''
+
         if self.token_pruning_enabled and layer_num == self.prune_layer_idx:
             # Suppress debug prints but keep the core pruning logic
             pruned_zonotope_w = attention.zonotope_w[:, :self.tokens_to_keep + 1, :]
             attention = make_zonotope_new_weights_same_args(pruned_zonotope_w, attention)
-        '''
 
 
         attention_layer_normed = attention.layer_norm(get_layernorm(ff).norm, get_layernorm(ff).layer_norm_type)  # prenorm 2
@@ -323,33 +322,7 @@ class IntervalBoundDiffVerViT(Verifier):
             del query
             del key
 
-        '''
-
         attention_probs = attention_scores.softmax(verbose=self.verbose, no_constraints=not self.args.add_softmax_sum_constraint)
-        '''
-        # --- Masked softmax to overestimate pruning (simulated -inf on masked keys) ---
-        if self.token_pruning_enabled and layer_num == self.prune_layer_idx:
-            # scores shape is (E, A, N_q, N_k). Build a mask of same center shape.
-            # Keep first K tokens (+CLS) as keys across all queries & heads.
-            keep = self.tokens_to_keep + 1  # +1 for CLS
-            center_shape = attention_scores.zonotope_w[0].shape  # (A, N_q, N_k)
-            assert len(center_shape) == 3, f"Expected (A,N,N) center, got {center_shape}"
-        
-            A, Nq, Nk = center_shape
-            mask = torch.zeros(center_shape, device=attention_scores.zonotope_w.device)
-            # Keep first K keys for every query in every head
-            mask[:, :, :min(keep, Nk)] = 1.0
-        
-            # Create constant zonotope mask and run masked softmax
-            mask_z = attention_scores.new_from_constant(mask)
-        
-            # If your mask_softmax expects 3D multiply, it will flatten head dim internally
-            attention_probs = attention_scores.mask_softmax(mask_z, verbose=self.verbose)
-        else:
-            attention_probs = attention_scores.softmax(
-                verbose=self.verbose,
-                no_constraints=not self.args.add_softmax_sum_constraint
-            )
 
         value = bounds_input.dense(attn.to_v)
 
