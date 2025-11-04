@@ -124,7 +124,7 @@ parser.add_argument('--tokens_to_keep', type=int, default=9,
 
 args, _ = parser.parse_known_args(argv)
 
-args.samples = 100
+args.samples = 5
 args.verbose = False
 args.debug = False
 args.log_error_terms_and_time = False
