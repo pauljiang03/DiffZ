@@ -2,7 +2,9 @@ from argparse import Namespace
 import torch
 from Verifiers.Zonotope import Zonotope
 
-# --- 1. Minimal args (mimic what DeepT normally passes) ---
+# ==========================================================
+# 1. Minimal fake args (consistent with your verifier config)
+# ==========================================================
 args = Namespace(
     device='cpu',
     perturbed_words=1,
@@ -14,22 +16,32 @@ args = Namespace(
     p=11,
 )
 
-# --- 2. Create a base Zonotope (just to inherit config) ---
-dummy_value = torch.randn(4, 1)  # 4 tokens × 1-D embedding
+# ==========================================================
+# 2. Create a base Zonotope (5 tokens × 1-dim embedding)
+# ==========================================================
+num_tokens = 5
+dummy_value = torch.randn(num_tokens, 1)
 z_base = Zonotope(args=args, p=args.p, eps=1e-6, perturbed_word_index=0, value=dummy_value)
 
-# --- 3. Build a constant logits Zonotope directly from base ---
+# ==========================================================
+# 3. Build constant logits & mask zonotopes from base
+# ==========================================================
+# Logits: 5 tokens, simple decreasing sequence
 logits_tensor = torch.tensor([[2.0], [1.0], [0.0], [-1.0], [-2.0]])
 logits = z_base.new_from_constant(logits_tensor)
 
-# --- 4. Build a binary mask Zonotope using the same base ---
+# Mask: keep first 3 tokens (CLS + 2 others), prune rest
 mask_tensor = torch.tensor([[1.0], [1.0], [1.0], [0.0], [0.0]])
 mask_z = logits.new_from_constant(mask_tensor)
 
-# --- 5. Apply the masked softmax ---
+# ==========================================================
+# 4. Apply masked softmax
+# ==========================================================
 masked_softmax = logits.mask_softmax(mask_z, verbose=False)
 
-# --- 6. Concretize and display results ---
+# ==========================================================
+# 5. Concretize and display results
+# ==========================================================
 lower, upper = masked_softmax.concretize()
 
 print("\n=== Masked Softmax Sanity Check ===")
