@@ -4,15 +4,14 @@ from argparse import Namespace
 
 # --- Minimal args stub to satisfy Zonotope constructor ---
 args = Namespace(
-    device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
-    p=2,
+    device='cpu',
     perturbed_words=1,
-    attack_type="synonym",
+    attack_type='synonym',
     all_words=True,
-    num_input_error_terms=1,
-    concretize_special_norm_error_together=True,
-    cpu=False
+    num_input_error_terms=0,
+    use_dot_product_variant3=False,   # <- add this
 )
+
 
 # --- Helper to create a simple zonotope with fixed logits ---
 def make_constant_zonotope(values):
