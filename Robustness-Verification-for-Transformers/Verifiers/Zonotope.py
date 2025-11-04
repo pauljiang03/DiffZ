@@ -616,6 +616,27 @@ class Zonotope:
         new_weights = torch.zeros_like(self.zonotope_w)
         new_weights[0] = tensor  # constant center, no error terms
         return make_zonotope_new_weights_same_args(new_weights, source_zonotope=self, clone=False)
+
+    def make_constant_zonotope(values, base_zonotope=None):
+        """
+        Construct a constant Zonotope whose parameters (p, eps, args, device)
+        match either a provided base_zonotope or the global args.
+        """
+        if base_zonotope is not None:
+            args_ref = base_zonotope.args
+            p_ref = base_zonotope.p
+            eps_ref = base_zonotope.eps
+        else:
+            args_ref = args
+            p_ref = getattr(args, "p", 11)
+            eps_ref = getattr(args, "eps", 1e-6)
+    
+        z_w = torch.zeros((1, len(values), 1), device=args_ref.device)
+        z_w[0, :, 0] = torch.tensor(values, device=args_ref.device)
+    
+        return Zonotope(args_ref, p=p_ref, eps=eps_ref,
+                        perturbed_word_index=0, zonotope_w=z_w)
+
     
 
     def t(self) -> "Zonotope":
