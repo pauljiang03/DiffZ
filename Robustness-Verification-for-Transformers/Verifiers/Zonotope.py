@@ -1693,6 +1693,31 @@ class Zonotope:
         zonotope_softmax_sum_constrained = zonotope_softmax.add_equality_constraint_on_softmax()
         return zonotope_softmax_sum_constrained
 
+    def mask_softmax(self, mask_z: "Zonotope", verbose=False) -> "Zonotope":
+        """
+        Masked softmax that simulates -inf logits for pruned tokens.
+        m_j = 1 → token kept, m_j = 0 → token pruned.
+
+        Equivalent to: softmax(z) over active tokens only.
+        This avoids using literal -inf while preserving sound over-approximation.
+        """
+        # Step 1: Align mask shape
+        assert self.zonotope_w.shape == mask_z.zonotope_w.shape, \
+            f"mask_softmax: mask shape {mask_z.zonotope_w.shape} must match logits {self.zonotope_w.shape}"
+
+        # Step 2: Apply large negative offset where mask == 0
+        # → approximates -inf in a numerically stable way
+        large_neg = -1e3
+        masked_logits = self.multiply(mask_z).add((mask_z.add(-1)).multiply(large_neg))
+
+        # Step 3: Compute softmax over masked logits
+        return masked_logits.softmax(
+            verbose=verbose,
+            no_constraints=False,       # keep standard constraints
+            use_new_softmax=True
+        )
+
+
     def add_equality_constraint_on_softmax(self) -> "Zonotope":
         # The shape of the softmax will be (1 + num error terms, num_words, num_words)
         # The softmax values will arranged in the last dimensions, e.g. the first softmax is zonotope_w[:, 0, :]
