@@ -9,7 +9,8 @@ args = Namespace(
     attack_type='synonym',
     all_words=True,
     num_input_error_terms=0,
-    use_dot_product_variant3=False,   # <- add this
+    use_dot_product_variant3=False,
+    use_other_dot_product_ordering=False,  # add this one too
 )
 
 
