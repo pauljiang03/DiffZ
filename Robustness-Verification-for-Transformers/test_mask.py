@@ -1,8 +1,7 @@
-import torch
-from Verifiers.Zonotope import Zonotope, make_zonotope_new_weights_same_args
 from argparse import Namespace
+import torch
+from Verifiers.Zonotope import Zonotope
 
-# --- Minimal args stub to satisfy Zonotope constructor ---
 args = Namespace(
     device='cpu',
     perturbed_words=1,
@@ -10,11 +9,15 @@ args = Namespace(
     all_words=True,
     num_input_error_terms=0,
     use_dot_product_variant3=False,
-    use_other_dot_product_ordering=False,  # add this one too
+    use_other_dot_product_ordering=False,
+    p=11,                      # ✅ add this line
 )
-dummy_value = torch.randn(4, 1)
-z = Zonotope(args=args, p=11, eps=1e-6, perturbed_word_index=0, value=dummy_value)
+p_val = args.p
+eps_val = 1e-6
 
+# 4 tokens × 1-dim embedding (avoid negative dimension)
+dummy_value = torch.randn(4, 1)
+z = Zonotope(args=args, p=p_val, eps=eps_val, perturbed_word_index=0, value=dummy_value)
 # --- Helper to create a simple zonotope with fixed logits ---
 def make_constant_zonotope(values):
     # Create a single "layer" zonotope with deterministic center (no error terms)
