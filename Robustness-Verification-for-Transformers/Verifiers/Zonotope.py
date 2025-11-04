@@ -1725,29 +1725,24 @@ class Zonotope:
         zonotope_softmax_sum_constrained = zonotope_softmax.add_equality_constraint_on_softmax()
         return zonotope_softmax_sum_constrained
 
-    def mask_softmax(self, mask_z: "Zonotope", verbose=False) -> "Zonotope":
-        """
-        Masked softmax that simulates -inf logits for pruned tokens.
-        m_j = 1 → token kept, m_j = 0 → token pruned.
-
-        Equivalent to: softmax(z) over active tokens only.
-        This avoids using literal -inf while preserving sound over-approximation.
-        """
-        # Step 1: Align mask shape
-        assert self.zonotope_w.shape == mask_z.zonotope_w.shape, \
-            f"mask_softmax: mask shape {mask_z.zonotope_w.shape} must match logits {self.zonotope_w.shape}"
-
-        # Step 2: Apply large negative offset where mask == 0
-        # → approximates -inf in a numerically stable way
-        large_neg = -1e3
-        masked_logits = self.multiply(mask_z).add((mask_z.add(-1)).multiply(large_neg))
-
-        # Step 3: Compute softmax over masked logits
-        return masked_logits.softmax(
-            verbose=verbose,
-            no_constraints=False,       # keep standard constraints
-            use_new_softmax=True
+    def mask_softmax(self, mask_z, verbose=False):
+        # Ensure mask_z has same error term dimension as self
+        mask_z = mask_z.expand_error_terms_to_match_zonotope(self)
+        
+        # Create a large negative constant (for pruned tokens)
+        large_neg = self.new_from_constant(
+            torch.full_like(self.zonotope_w[0], -1e9)
         )
+        large_neg = large_neg.expand_error_terms_to_match_zonotope(self)
+    
+        # Compute masked logits
+        masked_logits = self.multiply(mask_z).add(
+            (mask_z.add(-1)).multiply(large_neg)
+        )
+    
+        # Standard softmax on masked logits
+        return masked_logits.softmax(verbose=verbose)
+
 
 
     def add_equality_constraint_on_softmax(self) -> "Zonotope":
