@@ -607,42 +607,6 @@ class Zonotope:
             clone=True
         )
 
-    def new_from_constant(self, tensor: torch.Tensor):
-        """
-        Creates a new constant zonotope with the same args as self,
-        but with 0 error terms (center only).
-        """
-        center_shape = (1,) + tensor.shape  # one center term
-        new_weights = torch.zeros(center_shape, device=tensor.device, dtype=tensor.dtype)
-        new_weights[0] = tensor
-    
-        z_new = make_zonotope_new_weights_same_args(new_weights, source_zonotope=self, clone=False)
-        z_new.num_error_terms = 0  # ✅ reset error-term count
-        return z_new
-
-
-    def make_constant_zonotope(values, base_zonotope=None):
-        """
-        Construct a constant Zonotope whose parameters (p, eps, args, device)
-        match either a provided base_zonotope or the global args.
-        """
-        if base_zonotope is not None:
-            args_ref = base_zonotope.args
-            p_ref = base_zonotope.p
-            eps_ref = base_zonotope.eps
-        else:
-            args_ref = args
-            p_ref = getattr(args, "p", 11)
-            eps_ref = getattr(args, "eps", 1e-6)
-    
-        z_w = torch.zeros((1, len(values), 1), device=args_ref.device)
-        z_w[0, :, 0] = torch.tensor(values, device=args_ref.device)
-    
-        return Zonotope(args_ref, p=p_ref, eps=eps_ref,
-                        perturbed_word_index=0, zonotope_w=z_w)
-
-    
-
     def t(self) -> "Zonotope":
         """ Transposes the length and the dim_out dimensions of the bounds """
         assert self.zonotope_w.ndim in [3, 4], "Zonotope weights must have 3 or 4 dimensions"
@@ -1728,50 +1692,6 @@ class Zonotope:
 
         zonotope_softmax_sum_constrained = zonotope_softmax.add_equality_constraint_on_softmax()
         return zonotope_softmax_sum_constrained
-
-    def mask_softmax(self, mask_z, verbose=False):
-        """
-        Applies a binary mask before softmax.
-        Masked (0) positions get a large negative constant to
-        force their probability to ~0 after softmax.
-        Supports both 3D and 4D zonotopes (with dummy head dimension).
-        """
-    
-        # --- Align error-term dimensions ---
-        mask_z = mask_z.expand_error_terms_to_match_zonotope(self)
-    
-        # --- Align shapes (flatten head dim if needed) ---
-        if self.zonotope_w.ndim == 4:
-            # (E, A, N, D) → (E, N, D)
-            self_flat = make_zonotope_new_weights_same_args(
-                self.zonotope_w.mean(dim=1), source_zonotope=self, clone=False
-            )
-            mask_flat = make_zonotope_new_weights_same_args(
-                mask_z.zonotope_w.mean(dim=1), source_zonotope=mask_z, clone=False
-            )
-        else:
-            self_flat = self
-            mask_flat = mask_z
-    
-        # --- Create large negative constant for masked tokens ---
-        large_neg = self_flat.new_from_constant(
-            torch.full_like(self_flat.zonotope_w[0], -1e9)
-        )
-        large_neg = large_neg.expand_error_terms_to_match_zonotope(self_flat)
-    
-        # --- Apply masking ---
-        masked_logits = self_flat.multiply(mask_flat).add(
-            (mask_flat.add(-1)).multiply(large_neg)
-        )
-    
-        # --- Run normal softmax (it expects 4D so re-add dummy head) ---
-        if masked_logits.zonotope_w.ndim == 3:
-            masked_logits.zonotope_w = masked_logits.zonotope_w.unsqueeze(1)
-    
-        return masked_logits.softmax(verbose=verbose)
-
-
-
 
     def add_equality_constraint_on_softmax(self) -> "Zonotope":
         # The shape of the softmax will be (1 + num error terms, num_words, num_words)
