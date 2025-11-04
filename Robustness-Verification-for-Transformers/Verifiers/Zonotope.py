@@ -607,15 +607,19 @@ class Zonotope:
             clone=True
         )
 
-    def new_from_constant(self, tensor: torch.Tensor) -> "Zonotope":
+    def new_from_constant(self, tensor: torch.Tensor):
         """
-        Create a new Zonotope from a constant tensor, copying args/device from self.
-        Used for constructing masks or fixed-valued zonotopes.
+        Creates a new constant zonotope with the same args as self,
+        but with 0 error terms (center only).
         """
-        assert isinstance(tensor, torch.Tensor), "Input must be a torch.Tensor"
-        new_weights = torch.zeros_like(self.zonotope_w)
-        new_weights[0] = tensor  # constant center, no error terms
-        return make_zonotope_new_weights_same_args(new_weights, source_zonotope=self, clone=False)
+        center_shape = (1,) + tensor.shape  # one center term
+        new_weights = torch.zeros(center_shape, device=tensor.device, dtype=tensor.dtype)
+        new_weights[0] = tensor
+    
+        z_new = make_zonotope_new_weights_same_args(new_weights, source_zonotope=self, clone=False)
+        z_new.num_error_terms = 0  # ✅ reset error-term count
+        return z_new
+
 
     def make_constant_zonotope(values, base_zonotope=None):
         """
