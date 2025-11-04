@@ -13,8 +13,12 @@ args = Namespace(
     num_input_error_terms=0,
     use_dot_product_variant3=False,
     use_other_dot_product_ordering=False,
+    batch_softmax_computation=False,
+    add_softmax_sum_constraint=False,   # used in attention sometimes
+    keep_intermediate_zonotopes=False,  # safe default
     p=11,
 )
+
 
 # ==========================================================
 # 2. Create a base Zonotope (5 tokens × 1-dim embedding)
