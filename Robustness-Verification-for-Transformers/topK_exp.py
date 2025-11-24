@@ -2,7 +2,6 @@ import os
 import sys
 import torch
 import numpy as np
-import time
 from typing import List, Dict, Any
 
 # --- Import Environment Modules ---
@@ -17,8 +16,9 @@ from Verifiers.VerifierTopKPrune import VerifierTopKPrune
 # EXPERIMENT CONFIGURATION
 # ==============================================================================
 EPSILONS = [0.001, 0.005, 0.01]
-TOKENS_TO_KEEP_LIST = [9, 12, 15, 18, 25]  # Varying tokens pruned
-PRUNE_LAYERS_LIST = [0]         # Typically fixed for this specific metric check
+# Range from 5 to 16 (since total tokens = 17, we prune at least 1)
+TOKENS_TO_KEEP_LIST = list(range(5, 17)) 
+PRUNE_LAYER_IDX = 0  # Defaulting to first layer
 SAMPLES_PER_CONFIG = 5
 GPU_ID = 0
 # ==============================================================================
@@ -37,7 +37,7 @@ def calculate_metrics(results_diff):
     for i in range(valid_samples):
         lbl = results_diff[i]['label']
         
-        # Diff Bounds
+        # Diff Bounds for the Real Class
         total_low_diff += results_diff[i]['lower_bounds'][lbl]
         total_up_diff += results_diff[i]['upper_bounds'][lbl]
 
@@ -77,7 +77,7 @@ def main():
     set_seeds(args.seed)
     
     # --- 2. Load Model & Data ---
-    # Suppress loading noise
+    # Suppress output during loading
     original_stdout = sys.stdout
     sys.stdout = open(os.devnull, 'w')
     
@@ -98,27 +98,28 @@ def main():
             
     logger = FakeLogger()
     
-    # Restore stdout
+    # Restore stdout for experiment reporting
     sys.stdout = original_stdout
     
     print("\n" + "="*60)
-    print(f"Starting Top-K Pruning Experiment Suite")
+    print(f"Starting Top-K Pruning Experiment Suite (Total Tokens: 17)")
+    print(f"Samples per config: {SAMPLES_PER_CONFIG}")
     print("="*60)
 
     # --- 3. Experiment Loop ---
     for eps in EPSILONS:
         print(f"\n--- Epsilon: {eps} ---")
-        print(f"{'Tokens Kept':<12} | {'Avg Diff Lower Bound':<20} | {'Avg Diff Upper Bound':<20}")
+        print(f"{'Tokens Kept':<12} | {'Avg Diff Lower Bound':<22} | {'Avg Diff Upper Bound':<22}")
         print("-" * 60)
         
         for tokens in TOKENS_TO_KEEP_LIST:
             # Update dynamic arguments
             args.eps = eps
-            args.prune_layer_idx = PRUNE_LAYERS_LIST[0] # Using first defined layer
+            args.prune_layer_idx = PRUNE_LAYER_IDX
             args.tokens_to_keep = tokens
             
             # Instantiate Verifier
-            # We suppress print output from the verifier itself to keep terminal clean
+            # Suppress verifier internal prints (like proof logs) to keep table clean
             sys.stdout = open(os.devnull, 'w')
             verifier = VerifierTopKPrune(args, model, logger, num_classes=10, normalizer=normalizer)
             results_diff, results_p, results_p_prime = verifier.run(data_normalized)
@@ -128,9 +129,9 @@ def main():
             metrics = calculate_metrics(results_diff)
             
             if metrics:
-                print(f"{tokens:<12} | {metrics['avg_diff_lb']:<20.5f} | {metrics['avg_diff_ub']:<20.5f}")
+                print(f"{tokens:<12} | {metrics['avg_diff_lb']:<22.5f} | {metrics['avg_diff_ub']:<22.5f}")
             else:
-                print(f"{tokens:<12} | {'No valid results':<20} | {'-':<20}")
+                print(f"{tokens:<12} | {'No valid results':<22} | {'-':<22}")
 
     print("\n" + "="*60)
     print("Experiment Suite Completed.")
