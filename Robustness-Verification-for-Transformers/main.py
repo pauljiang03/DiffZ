@@ -57,7 +57,7 @@ def analyze_all_results(results_diff: List[Dict[str, Any]],
                         results_p_prime: List[Dict[str, Any]],
                         args):
     """
-    Analyzes differential bounds and per-class bounds.
+    Analyzes differential bounds, prints PER-SAMPLE per-class bounds, and then averages.
     """
     valid_samples = len(results_diff)
     if valid_samples == 0:
@@ -68,37 +68,54 @@ def analyze_all_results(results_diff: List[Dict[str, Any]],
     total_lower_bound_real_class = 0.0
     total_upper_bound_real_class = 0.0
     
-    # --- 2. Per-Class Average Bounds Accumulators ---
-    # We assume 10 classes for MNIST/CIFAR
+    # --- 2. Per-Class Accumulators for Final Average ---
     num_classes = 10
-    
     avg_lower_p = np.zeros(num_classes)
     avg_upper_p = np.zeros(num_classes)
-    
     avg_lower_p_prime = np.zeros(num_classes)
     avg_upper_p_prime = np.zeros(num_classes)
-    
     avg_lower_diff = np.zeros(num_classes)
     avg_upper_diff = np.zeros(num_classes)
 
+    print("\n" + "="*100)
+    print(f"DETAILED SAMPLE ANALYSIS ({valid_samples} SAMPLES)")
+    print(f"P: Unpruned | P': Pruned (Layer {args.prune_layer_idx}, Keep {args.tokens_to_keep})")
+    print("="*100)
+
     for i in range(valid_samples):
-        # Real Class Diff
         res_diff = results_diff[i]
+        res_p = results_p[i]
+        res_pp = results_p_prime[i]
+        
         label = res_diff['label']
         total_lower_bound_real_class += res_diff['lower_bounds'][label]
         total_upper_bound_real_class += res_diff['upper_bounds'][label]
         
-        # Per Class Accumulation
-        avg_lower_p += results_p[i]['lower_bounds']
-        avg_upper_p += results_p[i]['upper_bounds']
+        print(f"\n--- Sample {i} (True Label: {label}) ---")
+        print(f"   {'Class':<5} | {'P Lower':<10} | {'P Upper':<10} | {'P\' Lower':<10} | {'P\' Upper':<10} | {'Diff Low':<10} | {'Diff Up':<10}")
+        print("-" * 95)
         
-        avg_lower_p_prime += results_p_prime[i]['lower_bounds']
-        avg_upper_p_prime += results_p_prime[i]['upper_bounds']
-        
-        avg_lower_diff += results_diff[i]['lower_bounds']
-        avg_upper_diff += results_diff[i]['upper_bounds']
+        for c in range(num_classes):
+            # Current Sample Values
+            lp = res_p['lower_bounds'][c]
+            up = res_p['upper_bounds'][c]
+            lpp = res_pp['lower_bounds'][c]
+            upp = res_pp['upper_bounds'][c]
+            ldiff = res_diff['lower_bounds'][c]
+            udiff = res_diff['upper_bounds'][c]
+            
+            marker = "<<" if c == label else ""
+            print(f"   {c:<5} | {lp:<10.4f} | {up:<10.4f} | {lpp:<10.4f} | {upp:<10.4f} | {ldiff:<10.4f} | {udiff:<10.4f} {marker}")
 
-    # Averages
+            # Accumulate for Averages
+            avg_lower_p[c] += lp
+            avg_upper_p[c] += up
+            avg_lower_p_prime[c] += lpp
+            avg_upper_p_prime[c] += upp
+            avg_lower_diff[c] += ldiff
+            avg_upper_diff[c] += udiff
+
+    # Compute Averages
     avg_lower_p /= valid_samples
     avg_upper_p /= valid_samples
     avg_lower_p_prime /= valid_samples
@@ -110,8 +127,7 @@ def analyze_all_results(results_diff: List[Dict[str, Any]],
     avg_U_real = total_upper_bound_real_class / valid_samples
     
     print("\n" + "="*80)
-    print(f"VERIFICATION METRICS ({valid_samples} SAMPLES)")
-    print(f"P: Unpruned Model | P': Pruned Model (Layer {args.prune_layer_idx}, Keep {args.tokens_to_keep})")
+    print("AGGREGATE METRICS")
     print("="*80)
     
     print("1. Average Differential Bounds (Real Class):")
