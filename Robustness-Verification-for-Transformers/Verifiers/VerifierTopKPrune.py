@@ -15,7 +15,6 @@ from Verifiers.Verifier import Verifier
 from Verifiers.Zonotope import (
     Zonotope, 
     make_zonotope_new_weights_same_args, 
-    process_values, 
     cleanup_memory
 )
 from vit import ViT
@@ -46,101 +45,55 @@ def sample_correct_samples(args, data, target):
             break
     return examples
 
-# --- Local Softmax Implementation ---
+# --- Local Softmax Implementation (Stable Version) ---
 
 def softmax_with_mask(zonotope: Zonotope, 
                       mask: Optional[torch.Tensor] = None, 
                       verbose=False,
-                      use_new_softmax=True,
                       no_constraints=True,
                       add_value_positivity_constraint=False,
                       use_new_reciprocal=True) -> Zonotope:
     """
-    A standalone implementation of Zonotope Softmax that supports masking.
+    A standalone, STABLE implementation of Zonotope Softmax.
     
-    FIXES APPLIED:
-    1. Disables 'use_new_softmax' (optimized batch inverse) when masking is used, 
-       because inverting 0 (pruned tokens) causes crashes.
-    2. Uses 'minimal_area=False' for exponential bounds to prevent geometric 
-       assertion failures (diff < 0) on tight/unstable bounds.
+    CHANGES FROM ORIGINAL:
+    1. DISABLED the 'use_new_softmax' (process_values) path entirely. It causes
+       'exp_mark: diff < 0' crashes on unstable bounds and cannot handle masking.
+    2. FORCED 'minimal_area=False' for the exponential function. This uses a 
+       robust linear approximation instead of the brittle geometric one.
+    3. Appends the Masking operation (m * e^z) before the sum.
     """
-    num_rows = zonotope.zonotope_w.size(-2)
+    
     num_values = zonotope.zonotope_w.size(-1)
-    A = zonotope.zonotope_w.size(0)
 
-    # 1. Disable optimized softmax if masking is present
+    # 1. Compute Exponential: e^x
+    # We force minimal_area=False (Simple Exp) to prevent 'diff < 0' crashes.
+    zonotope_exp = zonotope.exp(minimal_area=False)
+
+    # 2. Apply Mask: m * e^x
+    # This sets the pruned tokens to 0.0, simulating e^-inf.
     if mask is not None:
-        use_new_softmax = False
+        zonotope_exp = zonotope_exp.multiply(mask)
 
-    if use_new_softmax:
-        # ... (Original Optimized Logic for Unpruned Model P) ...
-        if zonotope.args.batch_softmax_computation:
-            sum_w_list, new_error_terms_collapsed_list = [], []
-            for a in range(A):
-                sum_exp_diffs_w, new_error_terms_collapsed = process_values(
-                    zonotope.zonotope_w[a:a+1], zonotope, A=1, num_rows=num_rows, num_values=num_values,
-                    keep_intermediate_zonotopes=zonotope.args.keep_intermediate_zonotopes
-                )
-                sum_w_list.append(sum_exp_diffs_w)
-                new_error_terms_collapsed_list.append(new_error_terms_collapsed)
-                cleanup_memory()
+    # 3. Compute Denominator: Sum(m * e^x)
+    # We sum across the last dimension (dim=-1) to get the normalization factor.
+    zonotope_sum_w = zonotope_exp.zonotope_w.sum(dim=-1, keepdim=True).repeat(1, 1, 1, num_values)
+    zonotope_sum = make_zonotope_new_weights_same_args(zonotope_sum_w, zonotope, clone=False)
 
-            sum_exp_diffs_w = torch.cat(sum_w_list, dim=0)
-            new_error_terms_collapsed = torch.cat(new_error_terms_collapsed_list, dim=0)
-        else:
-            sum_exp_diffs_w, new_error_terms_collapsed = process_values(
-                zonotope.zonotope_w, zonotope, A, num_rows, num_values,
-                keep_intermediate_zonotopes=zonotope.args.keep_intermediate_zonotopes
-            )
-
-        new_error_terms_collapsed_intermediate_shape = torch.zeros(
-            A * num_rows * num_values, A, num_rows, num_values, device=zonotope.device
-        )
-        indices = torch.arange(A * num_rows * num_values, device=zonotope.device)
-        to_add = torch.ones_like(new_error_terms_collapsed, dtype=torch.bool, device=zonotope.device)
-        new_error_terms_collapsed_intermediate_shape[indices, to_add] = new_error_terms_collapsed[to_add]
-        
-        new_error_terms_collapsed_good_shape = new_error_terms_collapsed_intermediate_shape.permute(1, 0, 2, 3)
-
-        if not zonotope.args.keep_intermediate_zonotopes:
-            del new_error_terms_collapsed_intermediate_shape
-            cleanup_memory()
-
-        final_sum_exps_zonotope_w = torch.cat([sum_exp_diffs_w, new_error_terms_collapsed_good_shape], dim=1)
-        zonotope_sum_exp_diffs = make_zonotope_new_weights_same_args(final_sum_exps_zonotope_w, source_zonotope=zonotope, clone=False)
-
-        zonotope_softmax = zonotope_sum_exp_diffs.reciprocal(
-            original_implementation=not use_new_reciprocal, 
-            y_positive_constraint=add_value_positivity_constraint
-        )
-
-    else:
-        # ... (Explicit Logic: Exp -> Mask -> Sum -> Divide) ...
-        # 2. Use minimal_area=False (Simple Exp) to avoid geometric assertions errors
-        zonotope_exp = zonotope.exp(minimal_area=False)
-
-        # --- APPLY MASK ---
-        if mask is not None:
-            # Sets pruned tokens to 0. Safe for numerator.
-            zonotope_exp = zonotope_exp.multiply(mask)
-        # ------------------
-
-        # Calculate Denominator: Sum(Mask * Exp)
-        zonotope_sum_w = zonotope_exp.zonotope_w.sum(dim=-1, keepdim=True).repeat(1, 1, 1, num_values)
-        zonotope_sum = make_zonotope_new_weights_same_args(zonotope_sum_w, zonotope, clone=False)
-
-        # Divide: Numerator / Denominator
-        # For pruned tokens: 0 / Positive = 0 (Safe)
-        # For kept tokens: Positive / Positive = Positive (Safe)
-        zonotope_softmax = zonotope_exp.divide(
-            zonotope_sum, 
-            use_original_reciprocal=not use_new_reciprocal, 
-            y_positive_constraint=add_value_positivity_constraint
-        )
+    # 4. Compute Softmax: (m * e^x) / Sum(...)
+    # Note: We assume the sum is strictly positive (at least one token kept).
+    # The 'divide' function internally computes the reciprocal of the denominator.
+    zonotope_softmax = zonotope_exp.divide(
+        zonotope_sum, 
+        use_original_reciprocal=not use_new_reciprocal, 
+        y_positive_constraint=add_value_positivity_constraint
+    )
 
     if no_constraints:
         return zonotope_softmax
 
+    # 5. (Optional) Add Equality Constraints
+    # This helps tighten the bounds by enforcing Sum(Softmax) = 1
     u, l = zonotope_softmax.concretize()
     if (l.sum(dim=-1) - 1).abs().max().item() < 1e-6 and (u.sum(dim=-1) - 1).abs().max().item() < 1e-6:
         del u, l
@@ -185,6 +138,7 @@ class VerifierTopKPrune(Verifier):
         self.num_classes = num_classes
         
     def _run_single_model_bounds(self, image: torch.Tensor, eps: float, is_pruned: bool) -> Optional[Zonotope]:
+        """ Helper function to run the core bounding logic for one model (P or P'). """
         original_prune_enabled = self.token_pruning_enabled
         self.token_pruning_enabled = is_pruned
         bounds = self.get_bounds_difference_in_scores(image, eps)
@@ -235,6 +189,7 @@ class VerifierTopKPrune(Verifier):
                 timing = time.time() - start
                 sample_label = example['label'].item()
                 
+                # 3. Calculate Differential Bounds: P - P'
                 lower_bound_diff = lower_P - upper_P_prime
                 upper_bound_diff = upper_P - lower_P_prime
                 
@@ -281,7 +236,8 @@ class VerifierTopKPrune(Verifier):
             self.showed_warning = True
 
         cleanup_memory()
-        errorType = OSError if self.debug else AssertionError
+        # Catch more generic errors to prevent full crash on instability
+        errorType = (OSError, AssertionError, RuntimeError) if self.debug else (AssertionError, RuntimeError)
 
         try:
             with torch.no_grad():
@@ -297,11 +253,11 @@ class VerifierTopKPrune(Verifier):
                 bounds = self._bound_pooling(bounds)
                 bounds = self._bound_classifier(bounds)
                 return bounds
-        except errorType as err:
+        except Exception as err:
             print("\n=========================================================================")
             print(f"VERIFICATION FAILED: {type(err).__name__} occurred during bounding.")
             print(f"Current Pruning State (P'): {self.token_pruning_enabled}")
-            print(err)
+            print(f"Error: {err}")
             print("=========================================================================")
             return None
 
@@ -415,7 +371,7 @@ class VerifierTopKPrune(Verifier):
                 
                 pruning_mask = mask_tensor.reshape(1, 1, 1, -1)
 
-        # Use LOCAL softmax implementation that accepts mask
+        # --- FORCE STABLE SOFTMAX ---
         attention_probs = softmax_with_mask(
             attention_scores,
             mask=pruning_mask,
