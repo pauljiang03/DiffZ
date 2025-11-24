@@ -12,7 +12,6 @@ from einops.layers.torch import Rearrange
 
 # Imports from your existing environment
 from Verifiers.Verifier import Verifier
-# We import specific internals to recreate the softmax logic locally
 from Verifiers.Zonotope import (
     Zonotope, 
     make_zonotope_new_weights_same_args, 
@@ -47,7 +46,7 @@ def sample_correct_samples(args, data, target):
             break
     return examples
 
-# --- Local Softmax Implementation (Avoiding modifications to Zonotope.py) ---
+# --- Local Softmax Implementation ---
 
 def softmax_with_mask(zonotope: Zonotope, 
                       mask: Optional[torch.Tensor] = None, 
@@ -58,16 +57,24 @@ def softmax_with_mask(zonotope: Zonotope,
                       use_new_reciprocal=True) -> Zonotope:
     """
     A standalone implementation of Zonotope Softmax that supports masking.
-    This simulates e^-inf = 0 for pruned tokens by multiplying the exponential terms 
-    by the mask before normalization.
+    
+    FIXES APPLIED:
+    1. Disables 'use_new_softmax' (optimized batch inverse) when masking is used, 
+       because inverting 0 (pruned tokens) causes crashes.
+    2. Uses 'minimal_area=False' for exponential bounds to prevent geometric 
+       assertion failures (diff < 0) on tight/unstable bounds.
     """
     num_rows = zonotope.zonotope_w.size(-2)
     num_values = zonotope.zonotope_w.size(-1)
     A = zonotope.zonotope_w.size(0)
 
+    # 1. Disable optimized softmax if masking is present
+    if mask is not None:
+        use_new_softmax = False
+
     if use_new_softmax:
+        # ... (Original Optimized Logic for Unpruned Model P) ...
         if zonotope.args.batch_softmax_computation:
-            # Batch computation logic (simplified for clarity, mirroring Zonotope.py)
             sum_w_list, new_error_terms_collapsed_list = [], []
             for a in range(A):
                 sum_exp_diffs_w, new_error_terms_collapsed = process_values(
@@ -86,7 +93,6 @@ def softmax_with_mask(zonotope: Zonotope,
                 keep_intermediate_zonotopes=zonotope.args.keep_intermediate_zonotopes
             )
 
-        # Reconstruct the Zonotope representing sum(exp(diffs))
         new_error_terms_collapsed_intermediate_shape = torch.zeros(
             A * num_rows * num_values, A, num_rows, num_values, device=zonotope.device
         )
@@ -103,34 +109,29 @@ def softmax_with_mask(zonotope: Zonotope,
         final_sum_exps_zonotope_w = torch.cat([sum_exp_diffs_w, new_error_terms_collapsed_good_shape], dim=1)
         zonotope_sum_exp_diffs = make_zonotope_new_weights_same_args(final_sum_exps_zonotope_w, source_zonotope=zonotope, clone=False)
 
-        # --- APPLY MASK HERE ---
-        if mask is not None:
-            # Mask the exponential terms: m * e^z
-            zonotope_sum_exp_diffs = zonotope_sum_exp_diffs.multiply(mask)
-        # -----------------------
-
-        # Compute Reciprocal (Denominator)
         zonotope_softmax = zonotope_sum_exp_diffs.reciprocal(
             original_implementation=not use_new_reciprocal, 
             y_positive_constraint=add_value_positivity_constraint
         )
 
     else:
-        # Alternative Path
-        zonotope_exp = zonotope.exp_minimal_area()
+        # ... (Explicit Logic: Exp -> Mask -> Sum -> Divide) ...
+        # 2. Use minimal_area=False (Simple Exp) to avoid geometric assertions errors
+        zonotope_exp = zonotope.exp(minimal_area=False)
 
-        # --- APPLY MASK HERE ---
+        # --- APPLY MASK ---
         if mask is not None:
+            # Sets pruned tokens to 0. Safe for numerator.
             zonotope_exp = zonotope_exp.multiply(mask)
-        # -----------------------
+        # ------------------
 
-        l, u = zonotope_exp.concretize()
-        # Ensure positivity (pruned tokens are 0, which is fine)
-        # assert (l > -1e-9).all() 
-
+        # Calculate Denominator: Sum(Mask * Exp)
         zonotope_sum_w = zonotope_exp.zonotope_w.sum(dim=-1, keepdim=True).repeat(1, 1, 1, num_values)
         zonotope_sum = make_zonotope_new_weights_same_args(zonotope_sum_w, zonotope, clone=False)
 
+        # Divide: Numerator / Denominator
+        # For pruned tokens: 0 / Positive = 0 (Safe)
+        # For kept tokens: Positive / Positive = Positive (Safe)
         zonotope_softmax = zonotope_exp.divide(
             zonotope_sum, 
             use_original_reciprocal=not use_new_reciprocal, 
@@ -140,7 +141,6 @@ def softmax_with_mask(zonotope: Zonotope,
     if no_constraints:
         return zonotope_softmax
 
-    # Constraints logic (unchanged from original, but called on the result)
     u, l = zonotope_softmax.concretize()
     if (l.sum(dim=-1) - 1).abs().max().item() < 1e-6 and (u.sum(dim=-1) - 1).abs().max().item() < 1e-6:
         del u, l
@@ -154,9 +154,7 @@ def softmax_with_mask(zonotope: Zonotope,
 
 class VerifierTopKPrune(Verifier):
     """
-    Differential ViT Verifier implementing the Masked Softmax method[cite: 47, 52].
-    This simulates pruning by masking attention weights rather than slicing tensors,
-    allowing for sound differential verification of P vs P'.
+    Differential ViT Verifier implementing the Masked Softmax method.
     """
     def __init__(self, args, target: ViT, logger, num_classes: int, normalizer):
         self.args = args
@@ -179,7 +177,6 @@ class VerifierTopKPrune(Verifier):
         time_tag = datetime.now().strftime('%b%d_%H-%M-%S')
         self.res_filename = f"resultsVit_topk_prune_p_{args.p}_{time_tag}.csv"
 
-        # Pruning parameters
         self.token_pruning_enabled = getattr(args, 'prune_tokens', False)
         self.prune_layer_idx = getattr(args, 'prune_layer_idx', -1)
         self.tokens_to_keep = getattr(args, 'tokens_to_keep', -1)
@@ -188,7 +185,6 @@ class VerifierTopKPrune(Verifier):
         self.num_classes = num_classes
         
     def _run_single_model_bounds(self, image: torch.Tensor, eps: float, is_pruned: bool) -> Optional[Zonotope]:
-        """ Helper function to run the core bounding logic for one model (P or P'). """
         original_prune_enabled = self.token_pruning_enabled
         self.token_pruning_enabled = is_pruned
         bounds = self.get_bounds_difference_in_scores(image, eps)
@@ -196,12 +192,6 @@ class VerifierTopKPrune(Verifier):
         return bounds
 
     def run(self, data) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
-        """
-        Runs verification and returns three lists of results:
-        1. Differential bounds ([L_P - U_P', U_P - L_P'])
-        2. Individual bounds for P ([L_P, U_P])
-        3. Individual bounds for P' ([L_P', U_P'])
-        """
         examples = sample_correct_samples(self.args, data, self.target)
         if self.eps <= 0 or len(examples) == 0:
             print("Verification setup issues (eps<=0 or no samples found). Exiting.")
@@ -229,10 +219,10 @@ class VerifierTopKPrune(Verifier):
                 start = time.time()
                 embeddings = example["image"].to(self.device)
 
-                # 1. Run P (Unpruned) - No masking
+                # 1. Run P (Unpruned)
                 bounds_P = self._run_single_model_bounds(embeddings, self.eps, is_pruned=False)
                 
-                # 2. Run P' (Pruned) - With masking enabled if args.prune_tokens is True
+                # 2. Run P' (Pruned)
                 bounds_P_prime = self._run_single_model_bounds(embeddings, self.eps, is_pruned=self.args.prune_tokens)
 
                 if bounds_P is None or bounds_P_prime is None:
@@ -245,10 +235,7 @@ class VerifierTopKPrune(Verifier):
                 timing = time.time() - start
                 sample_label = example['label'].item()
                 
-                # 3. Calculate Differential Bounds: P - P'
-                # Differential Lower = Lower(P) - Upper(P')
                 lower_bound_diff = lower_P - upper_P_prime
-                # Differential Upper = Upper(P) - Lower(P')
                 upper_bound_diff = upper_P - lower_P_prime
                 
                 lower_bounds_np_diff = lower_bound_diff[0].cpu().numpy()
@@ -275,7 +262,6 @@ class VerifierTopKPrune(Verifier):
                     'index': i, 'time': timing
                 })
 
-                # Log all bound types to CSV
                 for c in range(self.num_classes):
                     self.results_file.write(f"{i},{c},{lower_bounds_np_diff[c]:f},{upper_bounds_np_diff[c]:f},{timing:.4f},{is_pruned_val},{prune_layer_val},{tokens_kept_val},differential\n")
                     self.results_file.write(f"{i},{c},{lower_P[0,c]:f},{upper_P[0,c]:f},{timing:.4f},False,-1,-1,individual_P\n")
@@ -283,7 +269,7 @@ class VerifierTopKPrune(Verifier):
 
                 self.results_file.flush()
                 
-                if (i + 1) % 10 == 0:
+                if (i + 1) % 1 == 0:
                     print(f"Completed {i+1}/{len(examples)} samples...")
 
         print(f"\nCompleted verification for {len(examples)} samples.")
@@ -302,7 +288,6 @@ class VerifierTopKPrune(Verifier):
                 bounds = self._bound_input(image, eps=eps)
 
                 for i, (attn, ff) in enumerate(self.target.transformer.layers):
-                    # Masking is applied inside _bound_layer -> _bound_attention
                     attention_scores, attention_probs, self_attention_output, bounds = self._bound_layer(bounds, attn, ff, layer_num=i)
 
                     if not self.args.keep_intermediate_zonotopes:
@@ -418,22 +403,16 @@ class VerifierTopKPrune(Verifier):
         # --- PRUNING MASK LOGIC ---
         pruning_mask = None
         if self.token_pruning_enabled:
-            # Check if we are at or past the layer where pruning activates
             if layer_num >= self.prune_layer_idx:
-                # Shape: (Heads, 1+Err, Seq, Keys)
-                # We want to mask the LAST dimension (Keys)
                 num_tokens = attention_scores.zonotope_w.shape[-1] 
                 
-                # Default: keep first K tokens (CLS + patches)
                 keep_k = self.tokens_to_keep
                 if keep_k > num_tokens:
                      keep_k = num_tokens
 
-                # Create binary mask: 1 for kept, 0 for pruned
                 mask_tensor = torch.zeros(num_tokens, device=self.device)
                 mask_tensor[:keep_k] = 1.0 
                 
-                # Reshape for broadcast: (1, 1, 1, num_tokens)
                 pruning_mask = mask_tensor.reshape(1, 1, 1, -1)
 
         # Use LOCAL softmax implementation that accepts mask
@@ -458,7 +437,6 @@ class VerifierTopKPrune(Verifier):
         return attention_scores, attention_probs, context, attention
 
     def _bound_pooling(self, bounds: Zonotope) -> Zonotope:
-        # Assuming the first token is the CLS token
         bounds = make_zonotope_new_weights_same_args(new_weights=bounds.zonotope_w[:, :1, :], source_zonotope=bounds, clone=False)
         return bounds
 
@@ -468,10 +446,10 @@ class VerifierTopKPrune(Verifier):
         return bounds
 
     def verify(self, example, example_num: int):
-        raise NotImplementedError("The max-eps search is disabled for differential verification.")
-
+        raise NotImplementedError("Max-eps search disabled.")
+    
     def verify_safety(self, example, image, index, eps):
-        raise NotImplementedError("This method is not used in differential verification mode.")
+        raise NotImplementedError("Method not used.")
 
     def get_safety(self, label: int, classifier_bounds: Zonotope) -> bool:
-        raise NotImplementedError("This method is not used in differential verification mode.")
+        raise NotImplementedError("Method not used.")
