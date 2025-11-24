@@ -19,7 +19,7 @@ EPSILONS = [0.001, 0.005, 0.01]
 # Range from 5 to 16 (since total tokens = 17, we prune at least 1)
 TOKENS_TO_KEEP_LIST = list(range(5, 17)) 
 PRUNE_LAYER_IDX = 0  # Defaulting to first layer
-SAMPLES_PER_CONFIG = 25
+SAMPLES_PER_CONFIG = 50
 GPU_ID = 0
 # ==============================================================================
 
