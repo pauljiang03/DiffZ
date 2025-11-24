@@ -55,13 +55,6 @@ def softmax_with_mask(zonotope: Zonotope,
                       use_new_reciprocal=True) -> Zonotope:
     """
     A standalone, STABLE implementation of Zonotope Softmax.
-    
-    CHANGES FROM ORIGINAL:
-    1. DISABLED the 'use_new_softmax' (process_values) path entirely. It causes
-       'exp_mark: diff < 0' crashes on unstable bounds and cannot handle masking.
-    2. FORCED 'minimal_area=False' for the exponential function. This uses a 
-       robust linear approximation instead of the brittle geometric one.
-    3. Appends the Masking operation (m * e^z) before the sum.
     """
     
     num_values = zonotope.zonotope_w.size(-1)
@@ -81,8 +74,6 @@ def softmax_with_mask(zonotope: Zonotope,
     zonotope_sum = make_zonotope_new_weights_same_args(zonotope_sum_w, zonotope, clone=False)
 
     # 4. Compute Softmax: (m * e^x) / Sum(...)
-    # Note: We assume the sum is strictly positive (at least one token kept).
-    # The 'divide' function internally computes the reciprocal of the denominator.
     zonotope_softmax = zonotope_exp.divide(
         zonotope_sum, 
         use_original_reciprocal=not use_new_reciprocal, 
@@ -93,7 +84,6 @@ def softmax_with_mask(zonotope: Zonotope,
         return zonotope_softmax
 
     # 5. (Optional) Add Equality Constraints
-    # This helps tighten the bounds by enforcing Sum(Softmax) = 1
     u, l = zonotope_softmax.concretize()
     if (l.sum(dim=-1) - 1).abs().max().item() < 1e-6 and (u.sum(dim=-1) - 1).abs().max().item() < 1e-6:
         del u, l
@@ -236,7 +226,7 @@ class VerifierTopKPrune(Verifier):
             self.showed_warning = True
 
         cleanup_memory()
-        # Catch more generic errors to prevent full crash on instability
+        # Catch generic errors to prevent full crash on instability
         errorType = (OSError, AssertionError, RuntimeError) if self.debug else (AssertionError, RuntimeError)
 
         try:
@@ -378,6 +368,22 @@ class VerifierTopKPrune(Verifier):
             verbose=self.verbose, 
             no_constraints=not self.args.add_softmax_sum_constraint
         )
+
+        # --- PROOF OF PRUNING ---
+        # This block verifies that tokens > K have exactly 0.0 upper bounds
+        if self.token_pruning_enabled and layer_num >= self.prune_layer_idx:
+            l_probs, u_probs = attention_probs.concretize()
+            k = self.tokens_to_keep
+            
+            # Check the Upper Bounds of the pruned region
+            pruned_region_upper = u_probs[..., k:]
+            max_pruned_val = pruned_region_upper.max().item()
+            
+            # Print Proof
+            print(f"   [Proof] Layer {layer_num} Pruned Tokens ({k}+): Max Upper Bound = {max_pruned_val:.10f}")
+            if max_pruned_val > 1e-9:
+                print("   [FAIL] Pruning Proof Failed! Non-zero attention detected.")
+        # ------------------------
 
         value = bounds_input.dense(attn.to_v)
 
