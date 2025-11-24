@@ -12,102 +12,109 @@ from mnist import mnist_test_dataloader, normalizer
 from vit import ViT
 from vit_attack import pgd_attack
 
-# --- CHANGED: Import the new VerifierTopKPrune ---
-# We import sample_correct_samples from here as well, since we included it in that file.
+# --- Import the VerifierTopKPrune ---
 from Verifiers.VerifierTopKPrune import VerifierTopKPrune, sample_correct_samples
 
 
-def analyze_robustness(results: List[Dict[str, Any]], model_name: str):
+def print_detailed_analysis(results_diff: List[Dict[str, Any]],
+                            results_p: List[Dict[str, Any]],
+                            results_p_prime: List[Dict[str, Any]],
+                            args):
     """
-    Analyzes robustness for a single model's results (P or P').
-    Counts samples where the lower bound of the correct class is not strictly
-    greater than the upper bound of all other classes.
+    Generates a detailed statistical report on robustness and differential stability.
     """
-    num_robustness_failures = 0
-    valid_samples = len(results)
-
-    if valid_samples == 0:
-        return  # Nothing to do
-
-    for result in results:
-        label = result['label']
-        lower = result['lower_bounds']
-        upper = result['upper_bounds']
-        num_classes = len(lower)
-
-        L_real = lower[label]
-
-        # Check for overlap with any other class
-        is_failure = False
-        for j in range(num_classes):
-            if j == label:
-                continue
-            U_other = upper[j]
-            if L_real <= U_other:
-                is_failure = True
-                break  # Found one overlap, no need to check others for this sample
-        
-        if is_failure:
-            num_robustness_failures += 1
-
-    print(f"\n4. Robustness Verification ({model_name}):")
-    print(f"   Samples where L[real_class] <= U[other_class] for at least one other class:")
-    print(f"   Count: {num_robustness_failures} / {valid_samples} ({num_robustness_failures/valid_samples*100:.2f}%)")
-    print("   Interpretation: This indicates samples that are not provably robust against the given perturbation.")
-
-
-def analyze_all_results(results_diff: List[Dict[str, Any]],
-                        results_p: List[Dict[str, Any]],
-                        results_p_prime: List[Dict[str, Any]],
-                        args):
-    """
-    Analyzes differential bounds and individual model robustness metrics.
-    """
-    # --- Part 1: Differential Metrics ---
-    total_lower_bound_real_class = 0.0
-    total_upper_bound_real_class = 0.0
-    max_upper_bound_real_class = -float('inf')
-    num_verification_failures = 0
     valid_samples = len(results_diff)
-
     if valid_samples == 0:
         print("No valid samples were processed to analyze.")
         return
 
-    for result in results_diff:
-        label = result['label']
-        lower = result['lower_bounds']
-        upper = result['upper_bounds']
-
-        L_real = lower[label]
-        U_real = upper[label]
+    # --- Helper to extract core robustness stats ---
+    def get_model_stats(res_list):
+        # Margin = Lower_bound(correct_class) - Max(Upper_bound(other_classes))
+        # If Margin > 0, the sample is PROVABLY ROBUST.
+        margins = []
+        widths = []
+        verified_count = 0
         
-        total_lower_bound_real_class += L_real
-        total_upper_bound_real_class += U_real
-        max_upper_bound_real_class = max(max_upper_bound_real_class, U_real)
+        for r in res_list:
+            lbl = r['label']
+            low = r['lower_bounds']
+            up = r['upper_bounds']
+            
+            # 1. Interval Width (Uncertainty) of the correct class
+            # Tighter bounds (smaller width) -> More precise verification
+            widths.append(up[lbl] - low[lbl])
+            
+            # 2. Robustness Margin
+            # Find the best "challenger" class (highest upper bound among incorrect classes)
+            other_classes = [i for i in range(len(up)) if i != lbl]
+            max_u_other = np.max([up[i] for i in other_classes])
+            
+            # The gap between our guaranteed lower bound and their guaranteed upper bound
+            margin = low[lbl] - max_u_other
+            margins.append(margin)
+            
+            if margin > 0:
+                verified_count += 1
+                
+        return np.array(margins), np.array(widths), verified_count
 
-        if lower[label] <= 0:
-            num_verification_failures += 1
-
-    avg_L_real = total_lower_bound_real_class / valid_samples
-    avg_U_real = total_upper_bound_real_class / valid_samples
-    max_U_real = max_upper_bound_real_class
+    # 1. Analyze P (Unpruned)
+    margins_p, widths_p, verified_p = get_model_stats(results_p)
     
+    # 2. Analyze P' (Pruned)
+    margins_p_prime, widths_p_prime, verified_p_prime = get_model_stats(results_p_prime)
+    
+    # 3. Analyze Differential (P - P')
+    # These bounds represent the range of possible divergence: [Min(P-P'), Max(P-P')]
+    diff_lowers = []
+    diff_uppers = []
+    diff_widths = [] # How "loose" is our differential bound?
+    
+    for r in results_diff:
+        lbl = r['label']
+        L_diff = r['lower_bounds'][lbl]
+        U_diff = r['upper_bounds'][lbl]
+        
+        diff_lowers.append(L_diff)
+        diff_uppers.append(U_diff)
+        diff_widths.append(U_diff - L_diff)
+    
+    diff_lowers = np.array(diff_lowers)
+    diff_uppers = np.array(diff_uppers)
+    diff_widths = np.array(diff_widths)
+    
+    # 4. Timing
+    times = np.array([r['time'] for r in results_diff])
+    
+    # --- PRINT REPORT ---
     print("\n" + "="*80)
-    print(f"VERIFICATION METRICS ({valid_samples} SAMPLES)")
-    print(f"P: Unpruned Model | P': Pruned Model (Layer {args.prune_layer_idx}, Keep {args.tokens_to_keep})")
+    print(f"DETAILED VERIFICATION REPORT ({valid_samples} SAMPLES)")
+    print(f"Noise (eps): {args.eps} | Pruning: Keep {args.tokens_to_keep} tokens after Layer {args.prune_layer_idx}")
     print("="*80)
     
-    print("1. Average Differential Bounds (Real Class):")
-    print(f"   Lower Bound (Avg L_P - U_P'): {avg_L_real:.5f}")
-    print(f"   Upper Bound (Avg U_P - L_P'): {avg_U_real:.5f}")
-    
-    print("\n2. Highest Differential Upper Bound (Real Class):")
-    print(f"   Max (U_P - L_P'): {max_U_real:.5f}")
-    
-    # --- Part 2: Individual Robustness Metrics ---
-    analyze_robustness(results_p, "P (Unpruned)")
-    analyze_robustness(results_p_prime, "P' (Pruned)")
+    print(f"\n--- 1. BASELINE MODEL P (Unpruned) ---")
+    print(f"   Verified Robustness: {verified_p}/{valid_samples} ({verified_p/valid_samples*100:.1f}%)")
+    print(f"   Avg Safety Margin:   {np.mean(margins_p):.5f}  (Higher is better, >0 is safe)")
+    print(f"   Avg Interval Width:  {np.mean(widths_p):.5f}   (Lower is tighter)")
+    print(f"   Worst Safety Margin: {np.min(margins_p):.5f}")
+
+    print(f"\n--- 2. PRUNED MODEL P' (Top-{args.tokens_to_keep}) ---")
+    print(f"   Verified Robustness: {verified_p_prime}/{valid_samples} ({verified_p_prime/valid_samples*100:.1f}%)")
+    print(f"   Avg Safety Margin:   {np.mean(margins_p_prime):.5f}")
+    print(f"   Avg Interval Width:  {np.mean(widths_p_prime):.5f}")
+    print(f"   Margin Shift vs P:   {np.mean(margins_p_prime - margins_p):.5f} (Negative means pruning hurt robustness)")
+
+    print(f"\n--- 3. DIFFERENTIAL STABILITY (P vs P') ---")
+    print(f"   Measures the output divergence of the correct class.")
+    print(f"   Range [L_diff, U_diff] contains the true difference (P - P').")
+    print(f"   Avg Differential Range:  [{np.mean(diff_lowers):.5f}, {np.mean(diff_uppers):.5f}]")
+    print(f"   Max Possible Divergence: {np.max(np.abs(np.concatenate((diff_lowers, diff_uppers)))):.5f}")
+    print(f"   Avg Diff Uncertainty:    {np.mean(diff_widths):.5f} (Size of the differential gap)")
+
+    print(f"\n--- 4. PERFORMANCE ---")
+    print(f"   Avg Time per Sample: {np.mean(times):.4f}s")
+    print(f"   Total Time:          {np.sum(times):.4f}s")
     print("="*80)
 
 
@@ -183,12 +190,10 @@ else:
     if not hasattr(args, 'eps') or args.eps <= 0:
         print("Argument --eps must be set to a positive value for verification.")
     else:
-        # --- CHANGED: Instantiate the new VerifierTopKPrune ---
-        # This replaces the old IntervalBoundDiffVerViT
         verifier = VerifierTopKPrune(args, model, logger, num_classes=10, normalizer=normalizer)
         
-        # Run verification to get all three sets of results
+        # Run verification
         results_diff, results_p, results_p_prime = verifier.run(data_normalized)
         
-        # Analyze and print all metrics
-        analyze_all_results(results_diff, results_p, results_p_prime, args)
+        # Print the new detailed report
+        print_detailed_analysis(results_diff, results_p, results_p_prime, args)
