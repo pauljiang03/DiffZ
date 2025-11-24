@@ -19,14 +19,12 @@ from Verifiers.VerifierTopKPrune import VerifierTopKPrune, sample_correct_sample
 def analyze_robustness(results: List[Dict[str, Any]], model_name: str):
     """
     Analyzes robustness for a single model's results (P or P').
-    Counts samples where the lower bound of the correct class is not strictly
-    greater than the upper bound of all other classes.
     """
     num_robustness_failures = 0
     valid_samples = len(results)
 
     if valid_samples == 0:
-        return  # Nothing to do
+        return 
 
     for result in results:
         label = result['label']
@@ -44,7 +42,7 @@ def analyze_robustness(results: List[Dict[str, Any]], model_name: str):
             U_other = upper[j]
             if L_real <= U_other:
                 is_failure = True
-                break  # Found one overlap, no need to check others for this sample
+                break 
         
         if is_failure:
             num_robustness_failures += 1
@@ -52,7 +50,6 @@ def analyze_robustness(results: List[Dict[str, Any]], model_name: str):
     print(f"\n4. Robustness Verification ({model_name}):")
     print(f"   Samples where L[real_class] <= U[other_class] for at least one other class:")
     print(f"   Count: {num_robustness_failures} / {valid_samples} ({num_robustness_failures/valid_samples*100:.2f}%)")
-    print("   Interpretation: This indicates samples that are not provably robust against the given perturbation.")
 
 
 def analyze_all_results(results_diff: List[Dict[str, Any]],
@@ -60,37 +57,57 @@ def analyze_all_results(results_diff: List[Dict[str, Any]],
                         results_p_prime: List[Dict[str, Any]],
                         args):
     """
-    Analyzes differential bounds and individual model robustness metrics.
+    Analyzes differential bounds and per-class bounds.
     """
-    # --- Part 1: Differential Metrics ---
-    total_lower_bound_real_class = 0.0
-    total_upper_bound_real_class = 0.0
-    max_upper_bound_real_class = -float('inf')
-    num_verification_failures = 0
     valid_samples = len(results_diff)
-
     if valid_samples == 0:
         print("No valid samples were processed to analyze.")
         return
 
-    for result in results_diff:
-        label = result['label']
-        lower = result['lower_bounds']
-        upper = result['upper_bounds']
+    # --- 1. Real Class Differential Metrics ---
+    total_lower_bound_real_class = 0.0
+    total_upper_bound_real_class = 0.0
+    
+    # --- 2. Per-Class Average Bounds Accumulators ---
+    # We assume 10 classes for MNIST/CIFAR
+    num_classes = 10
+    
+    avg_lower_p = np.zeros(num_classes)
+    avg_upper_p = np.zeros(num_classes)
+    
+    avg_lower_p_prime = np.zeros(num_classes)
+    avg_upper_p_prime = np.zeros(num_classes)
+    
+    avg_lower_diff = np.zeros(num_classes)
+    avg_upper_diff = np.zeros(num_classes)
 
-        L_real = lower[label]
-        U_real = upper[label]
+    for i in range(valid_samples):
+        # Real Class Diff
+        res_diff = results_diff[i]
+        label = res_diff['label']
+        total_lower_bound_real_class += res_diff['lower_bounds'][label]
+        total_upper_bound_real_class += res_diff['upper_bounds'][label]
         
-        total_lower_bound_real_class += L_real
-        total_upper_bound_real_class += U_real
-        max_upper_bound_real_class = max(max_upper_bound_real_class, U_real)
+        # Per Class Accumulation
+        avg_lower_p += results_p[i]['lower_bounds']
+        avg_upper_p += results_p[i]['upper_bounds']
+        
+        avg_lower_p_prime += results_p_prime[i]['lower_bounds']
+        avg_upper_p_prime += results_p_prime[i]['upper_bounds']
+        
+        avg_lower_diff += results_diff[i]['lower_bounds']
+        avg_upper_diff += results_diff[i]['upper_bounds']
 
-        if lower[label] <= 0:
-            num_verification_failures += 1
-
+    # Averages
+    avg_lower_p /= valid_samples
+    avg_upper_p /= valid_samples
+    avg_lower_p_prime /= valid_samples
+    avg_upper_p_prime /= valid_samples
+    avg_lower_diff /= valid_samples
+    avg_upper_diff /= valid_samples
+    
     avg_L_real = total_lower_bound_real_class / valid_samples
     avg_U_real = total_upper_bound_real_class / valid_samples
-    max_U_real = max_upper_bound_real_class
     
     print("\n" + "="*80)
     print(f"VERIFICATION METRICS ({valid_samples} SAMPLES)")
@@ -101,10 +118,13 @@ def analyze_all_results(results_diff: List[Dict[str, Any]],
     print(f"   Lower Bound (Avg L_P - U_P'): {avg_L_real:.5f}")
     print(f"   Upper Bound (Avg U_P - L_P'): {avg_U_real:.5f}")
     
-    print("\n2. Highest Differential Upper Bound (Real Class):")
-    print(f"   Max (U_P - L_P'): {max_U_real:.5f}")
-    
-    # --- Part 2: Individual Robustness Metrics ---
+    print("\n2. Average Bounds per Class (All Samples):")
+    print(f"   {'Class':<5} | {'P Lower':<10} | {'P Upper':<10} | {'P\' Lower':<10} | {'P\' Upper':<10} | {'Diff Low':<10} | {'Diff Up':<10}")
+    print("-" * 95)
+    for c in range(num_classes):
+        print(f"   {c:<5} | {avg_lower_p[c]:<10.4f} | {avg_upper_p[c]:<10.4f} | {avg_lower_p_prime[c]:<10.4f} | {avg_upper_p_prime[c]:<10.4f} | {avg_lower_diff[c]:<10.4f} | {avg_upper_diff[c]:<10.4f}")
+
+    # --- Part 3: Individual Robustness Metrics ---
     analyze_robustness(results_p, "P (Unpruned)")
     analyze_robustness(results_p_prime, "P' (Pruned)")
     print("="*80)
