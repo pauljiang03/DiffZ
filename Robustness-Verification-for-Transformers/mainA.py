@@ -16,7 +16,7 @@ from data_utils import set_seeds
 
 # --- Import the SYMBOLIC Verifier ---
 # Ensure the file 'VerifierTopKPruneA.py' exists with the new class
-from Verifiers/VerifierTopKPruneA import VerifierTopKPruneA
+from Verifiers.VerifierTopKPruneA import VerifierTopKPruneA
 
 
 # ==============================================================================
