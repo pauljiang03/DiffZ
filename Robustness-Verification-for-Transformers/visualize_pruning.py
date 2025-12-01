@@ -133,7 +133,7 @@ def visualize(args):
         heatmap = patch_scores.view(grid_dim, grid_dim).detach().cpu().numpy()
         ax2 = axes[row_idx][1]
         im2 = ax2.imshow(heatmap, cmap='plasma')
-        ax2.set_title("CLS Attention Scores")
+        #ax2.set_title("CLS Attention Scores")
         ax2.axis('off')
         
         # --- Column 3: The Pruned View ---
@@ -163,7 +163,7 @@ def visualize(args):
                                            linewidth=0, facecolor='black', alpha=0.85)
                     ax3.add_patch(rect)
                     
-        ax3.set_title(f"Pruned (Top-{k_patches} Patches)")
+        #ax3.set_title(f"Pruned (Top-{k_patches} Patches)")
         ax3.axis('off')
 
     out_file = f"pruning_viz_keep{args.keep}.png"
