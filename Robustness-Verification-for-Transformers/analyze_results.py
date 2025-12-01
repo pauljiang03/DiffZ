@@ -11,7 +11,7 @@ def analyze():
         print("No benchmark files found in results/ folder.")
         return
 
-    # 2. Store data structure: data[epsilon][tokens] = (avg_diff_lower, avg_diff_upper)
+    # 2. Store data structure
     experiments = {}
 
     print(f"Found {len(files)} files. Processing...\n")
@@ -19,8 +19,6 @@ def analyze():
     for filepath in files:
         filename = os.path.basename(filepath)
         
-        # Regex to extract Epsilon and Keep count from filename
-        # Expects format: bench_eps0.001_keep5.csv
         match = re.search(r"eps([\d\.]+)_keep(\d+)", filename)
         if not match:
             continue
@@ -31,17 +29,18 @@ def analyze():
         try:
             df = pd.read_csv(filepath)
             
-            # Calculate Differences (Unpruned - Pruned)
-            # Positive value = Bound got looser/worse (Pruned < Unpruned)
-            # Negative value = Bound got tighter/better (Pruned > Unpruned)
+            # --- CORRECT INTERVAL SUBTRACTION ---
+            # We want the bounds of (Unpruned - Pruned)
+            # Min(Diff) = Min(Unpruned) - Max(Pruned)
+            # Max(Diff) = Max(Unpruned) - Min(Pruned)
             
-            # Lower Bound Diff: (L_unpruned - L_pruned)
-            # If P=20, P'=15 -> Diff=5 (Loss of 5)
-            diff_lower = (df['L_real_unpruned'] - df['L_real_pruned']).mean()
+            # 1. Lower Bound of the Difference
+            # (How much smaller could Unpruned be compared to Pruned?)
+            diff_lower = (df['L_real_unpruned'] - df['U_real_pruned']).mean()
             
-            # Upper Bound Diff: (U_unpruned - U_pruned)
-            # If P=20, P'=15 -> Diff=5
-            diff_upper = (df['U_real_unpruned'] - df['U_real_pruned']).mean()
+            # 2. Upper Bound of the Difference
+            # (How much larger could Unpruned be compared to Pruned?)
+            diff_upper = (df['U_real_unpruned'] - df['L_real_pruned']).mean()
             
             if eps not in experiments:
                 experiments[eps] = {}
@@ -51,24 +50,20 @@ def analyze():
         except Exception as e:
             print(f"Error reading {filename}: {e}")
 
-    # 3. Print Output in Requested Format
-    
-    # Sort Epsilons
+    # 3. Print Output
     sorted_eps = sorted(experiments.keys())
     
     for eps in sorted_eps:
         print(f"--- Epsilon: {eps} ---")
-        print(f"{'Tokens Kept':<12} | {'Avg Diff Lower Bound':<22} | {'Avg Diff Upper Bound'}")
-        print("-" * 60)
+        # Adjust column widths for clarity
+        print(f"{'Tokens Kept':<12} | {'Avg Diff Lower (L_P - U_P\')':<28} | {'Avg Diff Upper (U_P - L_P\')'}")
+        print("-" * 75)
         
-        # Sort Tokens
         token_counts = sorted(experiments[eps].keys())
         
         for k in token_counts:
             d_low, d_up = experiments[eps][k]
-            
-            # Format nicely
-            print(f"{k:<12} | {d_low:<22.5f} | {d_up:.5f}")
+            print(f"{k:<12} | {d_low:<28.5f} | {d_up:.5f}")
         
         print("\n")
 
