@@ -32,6 +32,13 @@ def check_robustness(res: Dict[str, Any]) -> bool:
     
     return true_lb > max_other_ub
 
+def safe_add_argument(parser, arg_name, **kwargs):
+    """Helper to add arguments only if they don't already exist."""
+    # Check if any of the option strings are already present
+    existing_opts = parser._option_string_actions.keys()
+    if arg_name not in existing_opts:
+        parser.add_argument(arg_name, **kwargs)
+
 # --- Main Script ---
 
 if __name__ == "__main__":
@@ -39,15 +46,18 @@ if __name__ == "__main__":
     argv = sys.argv[1:]
     parser = Parser.get_parser()
 
-    # Pruning Args
-    parser.add_argument('--prune_tokens', action='store_true', help='Enable token pruning in P\'.')
-    parser.add_argument('--prune_layer_idx', type=int, default=0, help='Layer index to start pruning.')
-    parser.add_argument('--tokens_to_keep', type=int, default=9, help='Top-K tokens to keep.')
-    parser.add_argument('--tokens_to_prune', type=int, default=0, help='Bottom-X tokens to prune.')
+    # Pruning Args (Safely add them)
+    safe_add_argument(parser, '--prune_tokens', action='store_true', help='Enable token pruning in P\'.')
+    safe_add_argument(parser, '--prune_layer_idx', type=int, default=0, help='Layer index to start pruning.')
+    safe_add_argument(parser, '--tokens_to_keep', type=int, default=9, help='Top-K tokens to keep.')
+    safe_add_argument(parser, '--tokens_to_prune', type=int, default=0, help='Bottom-X tokens to prune.')
     
     # Benchmark Args
-    parser.add_argument('--samples', type=int, default=100, help='Number of samples to evaluate.')
-    parser.add_argument('--csv_name', type=str, default=None, help='Custom name for output CSV.')
+    # Note: 'samples' is usually already in Parser.py, so we skip adding it.
+    # If it is NOT in Parser.py, uncomment the line below:
+    # safe_add_argument(parser, '--samples', type=int, default=100, help='Number of samples to evaluate.')
+    
+    safe_add_argument(parser, '--csv_name', type=str, default=None, help='Custom name for output CSV.')
 
     args, _ = parser.parse_known_args(argv)
     args = update_arguments(args)
@@ -71,12 +81,15 @@ if __name__ == "__main__":
 
     # 3. Load Data
     # Load enough data for the requested samples
-    print(f"Loading {args.samples} samples from MNIST...")
+    print(f"Loading {args.samples} samples from MNIST (Please wait, loading imports)...")
     test_loader = mnist_test_dataloader(batch_size=1, shuffle=False)
     
     data_normalized = []
+    # Only load as many as we need (plus a buffer) to speed up startup
+    target_count = args.samples
+    
     for i, (x, y) in enumerate(test_loader):
-        if i >= args.samples: break
+        if i >= target_count: break
         data_normalized.append({"label": y.to(device), "image": x.to(device)})
 
     # 4. Load Model
@@ -84,10 +97,11 @@ if __name__ == "__main__":
                 dim=64, depth=1, heads=4, mlp_dim=128, layer_norm_type="no_var").to(device)
     
     # Try to load weights
-    weights = "mnist_transformer.pt" # Or "mnist_transformer_depth3.pt"
+    weights = "mnist_transformer.pt"
     if os.path.exists(weights):
-        model.load_state_dict(torch.load(weights, map_location=device))
-        print(f"Loaded weights: {weights}")
+        state = torch.load(weights, map_location=device)
+        model.load_state_dict(state)
+        # print(f"Loaded weights: {weights}")
     else:
         print("WARNING: Using random weights (File not found).")
     model.eval()
