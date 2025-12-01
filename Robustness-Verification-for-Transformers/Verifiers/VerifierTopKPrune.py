@@ -35,6 +35,7 @@ def sample_correct_samples(args, data, target):
     num_samples = min(args.samples, len(data))
     
     attempts = 0
+    # Try to find correct samples, but limit attempts to avoid infinite loops
     while len(examples) < num_samples and attempts < num_samples * 10:
         attempts += 1
         idx = random.randint(0, len(data) - 1)
@@ -81,8 +82,8 @@ def softmax_with_mask(zonotope: Zonotope,
             # Zono: [4, 3093, 17, 17] vs Mask: [4, 17, 17] -> Needs [4, 1, 17, 17]
             if w_shape[0] == m_shape[0]:
                 diff = len(w_shape) - len(m_shape)
-                # Insert '1's starting at index 1
                 new_shape = list(m_shape)
+                # Insert '1's starting at index 1
                 for _ in range(diff):
                     new_shape.insert(1, 1)
                 mask_aligned = mask.view(new_shape)
@@ -412,6 +413,17 @@ class VerifierTopKPrune(Verifier):
             # Mask Shape: [Batch, Heads, Q, K] (or similar)
             mask_tensor = (u_scores >= cutoff_threshold).float()
             pruning_mask = mask_tensor
+            
+            # --- PROOF OF PRUNING (Debug Print) ---
+            # Calculates exactly how many tokens are kept vs pruned
+            if self.token_pruning_enabled:
+                 total_tokens = pruning_mask.shape[-1]
+                 kept_counts = pruning_mask.sum(dim=-1)
+                 avg_kept = kept_counts.float().mean().item()
+                 # Only print once per batch to avoid spam
+                 if random.random() < 0.05: 
+                      print(f"   [PROOF] Layer {layer_num}: Total {total_tokens} | Avg Kept {avg_kept:.2f} | Avg Pruned {total_tokens - avg_kept:.2f}")
+            # --------------------------------------
 
         # =========================================================
 
