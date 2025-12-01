@@ -410,8 +410,7 @@ class VerifierTopKPrune(Verifier):
                  kept_count = mask_tensor.sum(dim=-1).mean().item()
                  print(f"L{layer_num} Pruning: Target Keep {k_keep}, Verified Keep {kept_count:.2f}")
 
-            pruning_mask = mask_tensor
-
+            pruning_mask = mask_tensor.unsqueeze(0)
         # =========================================================
 
         # Apply Softmax with the computed mask
