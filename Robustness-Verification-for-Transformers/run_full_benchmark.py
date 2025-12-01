@@ -71,6 +71,10 @@ if __name__ == "__main__":
     args.max_num_error_terms = 30000
     args.num_input_error_terms = 28 * 28
 
+    args.with_lirpa_transformer = False
+    args.all_words = True   # <--- Prevents the IndexError
+    args.concretize_special_norm_error_together = True
+
     # 2. Setup Device & Seeds
     if args.gpu != -1:
         os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
