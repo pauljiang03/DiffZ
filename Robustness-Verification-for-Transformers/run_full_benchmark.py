@@ -94,7 +94,7 @@ if __name__ == "__main__":
 
     # 4. Load Model
     model = ViT(image_size=28, patch_size=7, num_classes=10, channels=1,
-                dim=64, depth=1, heads=4, mlp_dim=128, layer_norm_type="no_var").to(device)
+                dim=64, depth=3, heads=4, mlp_dim=128, layer_norm_type="no_var").to(device)
     
     # Try to load weights
     weights = "mnist_transformer.pt"
