@@ -96,7 +96,7 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', type=int, default=0, help='Random seed used in previous run')
-    parser.add_argument('--count', type=int, default=3, help='Number of samples to show')
+    parser.add_argument('--count', type=int, default=5, help='Number of samples to show')
     parser.add_argument('--pool_size', type=int, default=200, help='Size of dataset pool. Use 200 for main.py, 100 for benchmark.')
     args = parser.parse_args()
     
