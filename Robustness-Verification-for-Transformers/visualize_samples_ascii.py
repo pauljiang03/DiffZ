@@ -62,11 +62,16 @@ def main(args):
     model.eval()
 
     # 3. Select Samples
-    print(f"Selecting {args.count} samples (Seed={args.seed})...\n")
-    
+    # CRITICAL FIX: Limit the data pool to match main.py (default 200)
+    # main.py stops loading after 200 items. Random sampling depends on this list size.
+    print(f"Loading first {args.pool_size} images into memory (Pool)...")
     data_list = []
-    for x, y in test_loader:
+    for i, (x, y) in enumerate(test_loader):
         data_list.append((x, y))
+        if i >= args.pool_size: # Match the break condition in main.py
+            break
+
+    print(f"Selecting {args.count} samples from pool of {len(data_list)} (Seed={args.seed})...\n")
 
     found = 0
     attempts = 0
@@ -90,8 +95,9 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--seed', type=int, default=0, help='Random seed')
+    parser.add_argument('--seed', type=int, default=0, help='Random seed used in previous run')
     parser.add_argument('--count', type=int, default=3, help='Number of samples to show')
+    parser.add_argument('--pool_size', type=int, default=200, help='Size of dataset pool. Use 200 for main.py, 100 for benchmark.')
     args = parser.parse_args()
     
     main(args)
