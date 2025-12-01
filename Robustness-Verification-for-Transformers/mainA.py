@@ -13,8 +13,7 @@ from vit import ViT
 from data_utils import set_seeds
 
 # --- Import the Coupled Verifier ---
-# Note: We import VerifierTopKPruneA from the file
-from Verifiers.VerifierTopKPruneA import VerifierTopKPruneA
+from Verifiers.VerifierTopKPrune import VerifierTopKPruneA
 
 
 # ==============================================================================
@@ -22,10 +21,6 @@ from Verifiers.VerifierTopKPruneA import VerifierTopKPruneA
 # ==============================================================================
 
 def analyze_robustness(results: List[Dict[str, Any]], model_name: str):
-    """
-    Analyzes robustness for a single model's results (P or P').
-    Checks if LowerBound(TrueClass) > UpperBound(OtherClasses).
-    """
     num_robustness_failures = 0
     valid_samples = len(results)
 
@@ -40,14 +35,11 @@ def analyze_robustness(results: List[Dict[str, Any]], model_name: str):
 
         L_real = lower[label]
 
-        # Check for overlap with any other class
         is_failure = False
         for j in range(num_classes):
             if j == label:
                 continue
             U_other = upper[j]
-            # Failure condition: The worst-case score for the real class 
-            # is lower than the best-case score for an incorrect class.
             if L_real <= U_other:
                 is_failure = True
                 break 
@@ -65,20 +57,14 @@ def analyze_all_results(results_diff: List[Dict[str, Any]],
                         results_p: List[Dict[str, Any]],
                         results_p_prime: List[Dict[str, Any]],
                         args):
-    """
-    Analyzes differential bounds.
-    NOTE: For mainA (Coupled Execution), results_diff contains the SYMBOLIC difference bounds.
-    """
     valid_samples = len(results_diff)
     if valid_samples == 0:
         print("No valid samples were processed to analyze.")
         return
 
-    # --- 1. Real Class Differential Metrics ---
     total_lower_bound_real_class = 0.0
     total_upper_bound_real_class = 0.0
     
-    # --- 2. Per-Class Accumulators for Final Average ---
     num_classes = 10
     avg_lower_p = np.zeros(num_classes)
     avg_upper_p = np.zeros(num_classes)
@@ -109,7 +95,6 @@ def analyze_all_results(results_diff: List[Dict[str, Any]],
         print("-" * 95)
         
         for c in range(num_classes):
-            # Current Sample Values
             lp = res_p['lower_bounds'][c]
             up = res_p['upper_bounds'][c]
             lpp = res_pp['lower_bounds'][c]
@@ -120,7 +105,6 @@ def analyze_all_results(results_diff: List[Dict[str, Any]],
             marker = "<<" if c == label else ""
             print(f"   {c:<5} | {lp:<10.4f} | {up:<10.4f} | {lpp:<10.4f} | {upp:<10.4f} | {ldiff:<10.4f} | {udiff:<10.4f} {marker}")
 
-            # Accumulate for Averages
             avg_lower_p[c] += lp
             avg_upper_p[c] += up
             avg_lower_p_prime[c] += lpp
@@ -128,7 +112,6 @@ def analyze_all_results(results_diff: List[Dict[str, Any]],
             avg_lower_diff[c] += ldiff
             avg_upper_diff[c] += udiff
 
-    # Compute Averages
     avg_lower_p /= valid_samples
     avg_upper_p /= valid_samples
     avg_lower_p_prime /= valid_samples
@@ -153,7 +136,6 @@ def analyze_all_results(results_diff: List[Dict[str, Any]],
     for c in range(num_classes):
         print(f"   {c:<5} | {avg_lower_p[c]:<10.4f} | {avg_upper_p[c]:<10.4f} | {avg_lower_p_prime[c]:<10.4f} | {avg_upper_p_prime[c]:<10.4f} | {avg_lower_diff[c]:<10.4f} | {avg_upper_diff[c]:<10.4f}")
 
-    # --- Part 3: Individual Robustness Metrics ---
     analyze_robustness(results_p, "P (Unpruned)")
     analyze_robustness(results_p_prime, "P' (Pruned)")
     print("="*80)
@@ -180,14 +162,23 @@ if __name__ == "__main__":
     # Parse and Update
     args, _ = parser.parse_known_args(argv)
 
-    # --- Manual Overrides for Testing ---
-    # You can comment these out to use pure command line args
-    args.samples = 5
-    args.verbose = False
-    args.debug = False
-    args.log_error_terms_and_time = False
+    # -------------------------------------------------------------------------
+    # CRITICAL FIX: Save pruning args before update_arguments() potentially wipes them
+    # -------------------------------------------------------------------------
+    _prune_tokens = args.prune_tokens
+    _prune_layer_idx = args.prune_layer_idx
+    _tokens_to_keep = args.tokens_to_keep
+    _tokens_to_prune = args.tokens_to_prune
 
+    # This function might reset args or create a new namespace
     args = update_arguments(args)
+    
+    # Restore values to ensure they exist
+    args.prune_tokens = _prune_tokens
+    args.prune_layer_idx = _prune_layer_idx
+    args.tokens_to_keep = _tokens_to_keep
+    args.tokens_to_prune = _tokens_to_prune
+    # -------------------------------------------------------------------------
     
     # --- Zonotope Specific Settings ---
     args.error_reduction_method = 'box'
@@ -211,16 +202,12 @@ if __name__ == "__main__":
     set_seeds(args.seed)
 
     # --- Data Loading ---
-    # Load raw dataloader
     test_data = mnist_test_dataloader(batch_size=1, shuffle=False)
-    # Reset seeds again to ensure consistency after dataloader init
     set_seeds(args.seed)
 
-    # Move to list of dicts for Verifier compatibility
     device = torch.device("cuda" if torch.cuda.is_available() and args.gpu != -1 else "cpu")
     args.device = device
     
-    # Pre-fetch data into memory and normalize structure
     data_normalized = []
     print("Loading data...")
     for i, (x, y) in enumerate(test_data):
@@ -228,17 +215,13 @@ if __name__ == "__main__":
             "label": y.to(device),
             "image": x.to(device)
         })
-        # Optimization: Only load as many as we need to sample from
-        # (Since sample_correct_samples picks randomly, we load a buffer)
         if i >= 200: 
             break
 
     # --- Model Setup ---
-    # Initialize tiny MNIST ViT
     model = ViT(image_size=28, patch_size=7, num_classes=10, channels=1,
                 dim=64, depth=3, heads=4, mlp_dim=128, layer_norm_type="no_var").to(device)
 
-    # Load Weights
     weights_path = "mnist_transformer.pt"
     if os.path.exists(weights_path):
         model.load_state_dict(torch.load(weights_path, map_location=device))
@@ -271,12 +254,6 @@ if __name__ == "__main__":
         if not hasattr(args, 'eps') or args.eps <= 0:
             print("Argument --eps must be set to a positive value for verification.")
         else:
-            # Instantiate the NEW Coupled Verifier (VerifierTopKPruneA)
-            # Note: We pass the 'normalizer' imported from mnist
             verifier = VerifierTopKPruneA(args, model, logger, num_classes=10, normalizer=normalizer)
-            
-            # Run verification
             results_diff, results_p, results_p_prime = verifier.run(data_normalized)
-            
-            # Analyze and print using the detailed reporter
             analyze_all_results(results_diff, results_p, results_p_prime, args)
