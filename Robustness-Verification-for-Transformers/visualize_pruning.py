@@ -5,6 +5,7 @@ import matplotlib.patches as patches
 import argparse
 import os
 import sys
+from einops import repeat  # <--- Added import
 
 # --- Import Environment ---
 try:
@@ -19,33 +20,40 @@ def get_attention_scores(model, image):
     """
     Manually runs the first layer of the ViT to get CLS attention scores.
     """
-    # 1. Patch Embedding + Pos Embedding
+    # 1. Patch Embedding
     x = model.to_patch_embedding(image)
     b, n, _ = x.shape
-    x += model.pos_embedding[:, :(n)]
     
-    # 2. Layer 0 Input Norm
+    # 2. Add CLS Token (Fix: Was missing in previous version)
+    cls_tokens = repeat(model.cls_token, '() n d -> b n d', b=b)
+    x = torch.cat((cls_tokens, x), dim=1)
+    
+    # 3. Add Positional Embedding
+    # n is num_patches (16), so n+1 is total tokens (17)
+    x += model.pos_embedding[:, :(n + 1)]
+    
+    # 4. Layer 0 Input Norm
     layer_0 = model.transformer.layers[0]
     attn_fn = layer_0[0].fn # The Attention object
     x_norm = attn_fn.norm(x)
     
-    # 3. Compute Q, K (Inner Attention Logic)
+    # 5. Compute Q, K (Inner Attention Logic)
     inner_attn = attn_fn.fn
     q = inner_attn.to_q(x_norm)
     k = inner_attn.to_k(x_norm)
     
     # Split heads
     h = inner_attn.heads
-    q = q.view(b, n, h, -1).permute(0, 2, 1, 3) # [1, h, n, d]
-    k = k.view(b, n, h, -1).permute(0, 2, 1, 3)
+    q = q.view(b, n + 1, h, -1).permute(0, 2, 1, 3) # [1, h, n+1, d]
+    k = k.view(b, n + 1, h, -1).permute(0, 2, 1, 3)
     
-    # 4. Dot Product (Attention Scores)
-    # Shape: [1, Heads, N, N]
+    # 6. Dot Product (Attention Scores)
+    # Shape: [1, Heads, N+1, N+1]
     dots = torch.matmul(q, k.transpose(-1, -2)) * inner_attn.scale
     
-    # 5. Extract CLS Attention (Token 0 attending to all others)
+    # 7. Extract CLS Attention (Token 0 attending to all others)
     # We average across heads to get the "general" importance
-    # Shape: [N] (17 tokens: CLS + 16 Patches)
+    # Shape: [N+1] (17 tokens: CLS + 16 Patches)
     cls_attn = dots[0, :, 0, :].mean(dim=0)
     
     return cls_attn
@@ -131,7 +139,6 @@ def visualize(args):
         # --- Column 3: The Pruned View ---
         # Create a mask image
         pruned_img = img_np.copy()
-        mask_overlay = torch.zeros_like(torch.tensor(img_np)).unsqueeze(-1).repeat(1,1,4).numpy() # RGBA
         
         ax3 = axes[row_idx][2]
         ax3.imshow(img_np, cmap='gray')
