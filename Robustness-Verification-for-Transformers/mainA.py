@@ -14,9 +14,9 @@ from vit import ViT
 from vit_attack import pgd_attack
 from data_utils import set_seeds
 
-# --- Import the Updated Verifier ---
-# Ensure the file 'Verifiers/VerifierTopKPrune.py' exists with the new class
-from Verifiers.VerifierTopKPruneA import VerifierTopKPruneA
+# --- Import the SYMBOLIC Verifier ---
+# Ensure the file 'VerifierTopKPruneA.py' exists with the new class
+from VerifierTopKPruneA import VerifierTopKPruneA
 
 
 # ==============================================================================
@@ -81,15 +81,11 @@ def analyze_all_results(results_diff: List[Dict[str, Any]],
     
     # --- 2. Per-Class Accumulators for Final Average ---
     num_classes = 10
-    avg_lower_p = np.zeros(num_classes)
-    avg_upper_p = np.zeros(num_classes)
-    avg_lower_p_prime = np.zeros(num_classes)
-    avg_upper_p_prime = np.zeros(num_classes)
     avg_lower_diff = np.zeros(num_classes)
     avg_upper_diff = np.zeros(num_classes)
 
     print("\n" + "="*100)
-    print(f"DETAILED SAMPLE ANALYSIS ({valid_samples} SAMPLES)")
+    print(f"DETAILED SYMBOLIC ANALYSIS ({valid_samples} SAMPLES)")
     
     prune_mode = f"Bottom-{args.tokens_to_prune}" if args.tokens_to_prune > 0 else f"Top-{args.tokens_to_keep}"
     print(f"P: Unpruned | P': Pruned (Layer {args.prune_layer_idx}, Strategy: {prune_mode})")
@@ -97,42 +93,28 @@ def analyze_all_results(results_diff: List[Dict[str, Any]],
 
     for i in range(valid_samples):
         res_diff = results_diff[i]
-        res_p = results_p[i]
-        res_pp = results_p_prime[i]
         
         label = res_diff['label']
         total_lower_bound_real_class += res_diff['lower_bounds'][label]
         total_upper_bound_real_class += res_diff['upper_bounds'][label]
         
         print(f"\n--- Sample {i} (True Label: {label}) ---")
-        print(f"   {'Class':<5} | {'P Low':<10} | {'P Up':<10} | {'P\' Low':<10} | {'P\' Up':<10} | {'Diff Low':<10} | {'Diff Up':<10}")
-        print("-" * 95)
+        print(f"   {'Class':<5} | {'Diff Low':<12} | {'Diff Up':<12} | {'Width':<12}")
+        print("-" * 55)
         
         for c in range(num_classes):
-            # Current Sample Values
-            lp = res_p['lower_bounds'][c]
-            up = res_p['upper_bounds'][c]
-            lpp = res_pp['lower_bounds'][c]
-            upp = res_pp['upper_bounds'][c]
             ldiff = res_diff['lower_bounds'][c]
             udiff = res_diff['upper_bounds'][c]
+            width = udiff - ldiff
             
             marker = "<<" if c == label else ""
-            print(f"   {c:<5} | {lp:<10.4f} | {up:<10.4f} | {lpp:<10.4f} | {upp:<10.4f} | {ldiff:<10.4f} | {udiff:<10.4f} {marker}")
+            print(f"   {c:<5} | {ldiff:<12.6f} | {udiff:<12.6f} | {width:<12.6f} {marker}")
 
             # Accumulate for Averages
-            avg_lower_p[c] += lp
-            avg_upper_p[c] += up
-            avg_lower_p_prime[c] += lpp
-            avg_upper_p_prime[c] += upp
             avg_lower_diff[c] += ldiff
             avg_upper_diff[c] += udiff
 
     # Compute Averages
-    avg_lower_p /= valid_samples
-    avg_upper_p /= valid_samples
-    avg_lower_p_prime /= valid_samples
-    avg_upper_p_prime /= valid_samples
     avg_lower_diff /= valid_samples
     avg_upper_diff /= valid_samples
     
@@ -140,22 +122,21 @@ def analyze_all_results(results_diff: List[Dict[str, Any]],
     avg_U_real = total_upper_bound_real_class / valid_samples
     
     print("\n" + "="*80)
-    print("AGGREGATE METRICS")
+    print("AGGREGATE SYMBOLIC METRICS")
     print("="*80)
     
     print("1. Average Differential Bounds (Real Class):")
-    print(f"   Lower Bound (Avg L_P - U_P'): {avg_L_real:.5f}")
-    print(f"   Upper Bound (Avg U_P - L_P'): {avg_U_real:.5f}")
+    print(f"   Lower Bound (Avg L_diff): {avg_L_real:.6f}")
+    print(f"   Upper Bound (Avg U_diff): {avg_U_real:.6f}")
+    print(f"   Average Width: {avg_U_real - avg_L_real:.6f}")
     
     print("\n2. Average Bounds per Class (All Samples):")
-    print(f"   {'Class':<5} | {'P Low':<10} | {'P Up':<10} | {'P\' Low':<10} | {'P\' Up':<10} | {'Diff Low':<10} | {'Diff Up':<10}")
-    print("-" * 95)
+    print(f"   {'Class':<5} | {'Diff Low':<12} | {'Diff Up':<12} | {'Width':<12}")
+    print("-" * 55)
     for c in range(num_classes):
-        print(f"   {c:<5} | {avg_lower_p[c]:<10.4f} | {avg_upper_p[c]:<10.4f} | {avg_lower_p_prime[c]:<10.4f} | {avg_upper_p_prime[c]:<10.4f} | {avg_lower_diff[c]:<10.4f} | {avg_upper_diff[c]:<10.4f}")
+        w = avg_upper_diff[c] - avg_lower_diff[c]
+        print(f"   {c:<5} | {avg_lower_diff[c]:<12.6f} | {avg_upper_diff[c]:<12.6f} | {w:<12.6f}")
 
-    # --- Part 3: Individual Robustness Metrics ---
-    analyze_robustness(results_p, "P (Unpruned)")
-    analyze_robustness(results_p_prime, "P' (Pruned)")
     print("="*80)
 
 
@@ -249,7 +230,7 @@ if __name__ == "__main__":
     model.eval()
 
     # --- Run Verification ---
-    print(f"\n--- Verification Setup ---")
+    print(f"\n--- Symbolic Verification Setup ---")
     print(f"Target Samples: {args.samples}")
     if args.prune_tokens:
         if args.tokens_to_prune > 0:
@@ -271,11 +252,12 @@ if __name__ == "__main__":
         if not hasattr(args, 'eps') or args.eps <= 0:
             print("Argument --eps must be set to a positive value for verification.")
         else:
-            # Instantiate the Sound Top-K Verifier
+            # Instantiate the SYMBOLIC Verifier A
             # Note: We pass the 'normalizer' imported from mnist
-            verifier = VerifierTopKPrune(args, model, logger, num_classes=10, normalizer=normalizer)
+            verifier = VerifierTopKPruneA(args, model, logger, num_classes=10, normalizer=normalizer)
             
             # Run verification
+            # results_p and results_p_prime are likely empty in the A version, which is fine
             results_diff, results_p, results_p_prime = verifier.run(data_normalized)
             
             # Analyze and print using the detailed reporter
