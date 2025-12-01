@@ -13,7 +13,7 @@ from vit import ViT
 from data_utils import set_seeds
 
 # --- Import the Coupled Verifier ---
-from Verifiers.VerifierTopKPrune import VerifierTopKPruneA
+from Verifiers.VerifierTopKPruneA import VerifierTopKPruneA
 
 
 # ==============================================================================
