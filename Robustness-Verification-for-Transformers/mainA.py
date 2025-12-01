@@ -16,7 +16,7 @@ from data_utils import set_seeds
 
 # --- Import the Updated Verifier ---
 # Ensure the file 'Verifiers/VerifierTopKPrune.py' exists with the new class
-from Verifiers.VerifierTopKPrune import VerifierTopKPrune
+from Verifiers.VerifierTopKPruneA import VerifierTopKPruneA
 
 
 # ==============================================================================
