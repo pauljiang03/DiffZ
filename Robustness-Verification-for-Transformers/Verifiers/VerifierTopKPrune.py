@@ -32,17 +32,14 @@ def sample_correct_samples(args, data, target):
     Samples correctly classified examples from the dataset.
     """
     examples = []
-    # Safety check for requested samples vs dataset size
     num_samples = min(args.samples, len(data))
     
     attempts = 0
-    # Try to find correct samples, but don't loop forever
     while len(examples) < num_samples and attempts < num_samples * 10:
         attempts += 1
         idx = random.randint(0, len(data) - 1)
         example = data[idx]
         
-        # Quick inference check
         with torch.no_grad():
             logits = target(example["image"].to(args.device))
             prediction = torch.argmax(logits, dim=-1)
@@ -77,17 +74,26 @@ def softmax_with_mask(zonotope: Zonotope,
         w_shape = zonotope_exp.zonotope_w.shape
         m_shape = mask.shape
         
-        # If the Zonotope has more dimensions than the mask (e.g. Error Terms),
-        # we assume the mask corresponds to the LAST dimensions (Batch, Heads, Q, K).
-        # We prepend 1s to the mask to align it.
+        # If lengths differ, we must align
         if len(w_shape) > len(m_shape):
-            diff = len(w_shape) - len(m_shape)
-            # Create a view: e.g. Mask (1, 4, 17, 17) -> (1, 1, 1, 4, 17, 17)
-            new_view_shape = (1,) * diff + m_shape
-            mask_aligned = mask.view(new_view_shape)
-            
-            # Debugging print (Optional: remove after confirming fix)
-            # print(f"   [Debug] Auto-Aligning Mask: {list(m_shape)} -> {list(new_view_shape)} to match W {list(w_shape)}")
+            # CASE A: The first dimensions match (e.g. Heads=4 match Heads=4)
+            # This implies the missing "Error Term" dimension is INSIDE (at index 1)
+            # Zono: [4, 3093, 17, 17] vs Mask: [4, 17, 17] -> Needs [4, 1, 17, 17]
+            if w_shape[0] == m_shape[0]:
+                diff = len(w_shape) - len(m_shape)
+                # Insert '1's starting at index 1
+                new_shape = list(m_shape)
+                for _ in range(diff):
+                    new_shape.insert(1, 1)
+                mask_aligned = mask.view(new_shape)
+                
+            # CASE B: The first dimensions DO NOT match
+            # This implies the missing dimensions are at the START (standard broadcasting)
+            # Zono: [3093, 4, 17, 17] vs Mask: [4, 17, 17] -> Needs [1, 4, 17, 17]
+            else:
+                diff = len(w_shape) - len(m_shape)
+                new_shape = (1,) * diff + m_shape
+                mask_aligned = mask.view(new_shape)
         else:
             mask_aligned = mask
 
@@ -102,7 +108,6 @@ def softmax_with_mask(zonotope: Zonotope,
             raise e
 
     # 3. Compute Denominator: Sum(m * e^x)
-    # We sum across the last dimension (dim=-1) to get the normalization factor.
     zonotope_sum_w = zonotope_exp.zonotope_w.sum(dim=-1, keepdim=True).repeat(1, 1, 1, num_values)
     zonotope_sum = make_zonotope_new_weights_same_args(zonotope_sum_w, zonotope, clone=False)
 
@@ -129,9 +134,6 @@ def softmax_with_mask(zonotope: Zonotope,
 # --- Main Class Definition ---
 
 class VerifierTopKPrune(Verifier):
-    """
-    Differential ViT Verifier implementing Sound Top-K / Bottom-X Pruning.
-    """
     def __init__(self, args, target: ViT, logger, num_classes: int, normalizer):
         self.args = args
         self.device = args.device
@@ -153,10 +155,8 @@ class VerifierTopKPrune(Verifier):
         time_tag = datetime.now().strftime('%b%d_%H-%M-%S')
         self.res_filename = f"resultsVit_topk_prune_p_{args.p}_{time_tag}.csv"
 
-        # Pruning Configuration
         self.token_pruning_enabled = getattr(args, 'prune_tokens', False)
         self.prune_layer_idx = getattr(args, 'prune_layer_idx', -1)
-        # Supports both "Keep K" and "Prune X" arguments
         self.tokens_to_keep = getattr(args, 'tokens_to_keep', -1)
         self.tokens_to_prune = getattr(args, 'tokens_to_prune', 0)
         
@@ -164,7 +164,6 @@ class VerifierTopKPrune(Verifier):
         self.num_classes = num_classes
         
     def _run_single_model_bounds(self, image: torch.Tensor, eps: float, is_pruned: bool) -> Optional[Zonotope]:
-        """ Helper function to run the core bounding logic for one model (P or P'). """
         original_prune_enabled = self.token_pruning_enabled
         self.token_pruning_enabled = is_pruned
         
@@ -197,7 +196,6 @@ class VerifierTopKPrune(Verifier):
         print(f"Running Verification for {len(examples)} samples using Sound Pruning...")
         print(f"Results log file: {file_path}")
 
-        # Logging helper strings
         is_pruned_val = str(self.args.prune_tokens).lower()
         prune_layer_val = self.args.prune_layer_idx
         
@@ -214,10 +212,7 @@ class VerifierTopKPrune(Verifier):
                 start = time.time()
                 embeddings = example["image"].to(self.device)
 
-                # 1. Run P (Unpruned / Baseline)
                 bounds_P = self._run_single_model_bounds(embeddings, self.eps, is_pruned=False)
-                
-                # 2. Run P' (Pruned)
                 bounds_P_prime = self._run_single_model_bounds(embeddings, self.eps, is_pruned=self.args.prune_tokens)
 
                 if bounds_P is None or bounds_P_prime is None:
@@ -230,7 +225,6 @@ class VerifierTopKPrune(Verifier):
                 timing = time.time() - start
                 sample_label = example['label'].item()
                 
-                # 3. Calculate Differential Bounds: P - P'
                 lower_bound_diff = lower_P - upper_P_prime
                 upper_bound_diff = upper_P - lower_P_prime
                 
@@ -301,7 +295,7 @@ class VerifierTopKPrune(Verifier):
             if self.debug:
                  import traceback
                  traceback.print_exc()
-            raise err # Re-raise to see traceback if needed
+            raise err 
 
     def _bound_input(self, image: torch.Tensor, eps: float) -> Zonotope:
         patch_size = self.target.patch_size
@@ -403,34 +397,24 @@ class VerifierTopKPrune(Verifier):
         # =========================================================
         pruning_mask = None
         if self.token_pruning_enabled and layer_num >= self.prune_layer_idx:
-            
-            # 1. Determine K (Target number of tokens to KEEP)
             num_tokens = attention_scores.zonotope_w.shape[-1]
-            
             if self.tokens_to_prune > 0:
                 k_keep = num_tokens - self.tokens_to_prune
             else:
                 k_keep = self.tokens_to_keep
-            
             k_keep = max(1, min(k_keep, num_tokens))
 
-            # 2. Concretize Scores to get Interval Bounds [L, U]
             l_scores, u_scores = attention_scores.concretize()
             
-            # 3. Identify the "Threshold of Safety"
             topk_values = torch.topk(l_scores, k_keep, dim=-1, largest=True, sorted=True).values
             cutoff_threshold = topk_values[..., -1].unsqueeze(-1)
             
-            # 4. Generate Mask (Original Shape: [Batch, Heads, Q, K])
+            # Mask Shape: [Batch, Heads, Q, K] (or similar)
             mask_tensor = (u_scores >= cutoff_threshold).float()
-            
-            # NOTE: We DO NOT manually unsqueeze here anymore.
-            # The new softmax_with_mask handles the broadcasting automatically.
             pruning_mask = mask_tensor
 
         # =========================================================
 
-        # Apply Softmax with the computed mask
         attention_probs = softmax_with_mask(
             attention_scores,
             mask=pruning_mask,
