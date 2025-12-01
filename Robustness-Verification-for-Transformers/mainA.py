@@ -14,7 +14,7 @@ from data_utils import set_seeds
 
 # --- Import the Coupled Verifier ---
 # Note: We import VerifierTopKPruneA from the file
-from Verifiers.VerifierTopKPrune import VerifierTopKPruneA
+from Verifiers.VerifierTopKPruneA import VerifierTopKPruneA
 
 
 # ==============================================================================
