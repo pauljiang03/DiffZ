@@ -121,7 +121,7 @@ def visualize(args):
         # --- Column 1: Original with Grid ---
         ax1 = axes[row_idx][0]
         ax1.imshow(img_np, cmap='gray')
-        ax1.set_title(f"True: {label.item()} | Keep: {args.keep}")
+        #ax1.set_title(f"True: {label.item()} | Keep: {args.keep}")
         ax1.axis('off')
         # Overlay Grid
         for i in range(1, grid_dim):
