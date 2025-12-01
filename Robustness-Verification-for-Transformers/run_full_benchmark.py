@@ -74,6 +74,7 @@ if __name__ == "__main__":
     args.with_lirpa_transformer = False
     args.all_words = True   # <--- Prevents the IndexError
     args.concretize_special_norm_error_together = True
+    args.gpu = 0
 
     # 2. Setup Device & Seeds
     if args.gpu != -1:
